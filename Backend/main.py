@@ -62,6 +62,16 @@ class AgentRequest(BaseModel):
     agent_id: str
     prompt: Optional[str] = ""
 
+# 0. GET / (Root Service Discovery)
+@app.get("/")
+async def root_endpoint():
+    return {
+        "service": "AI Engineering Copilot Backend API",
+        "status": "online",
+        "docs_url": "/docs",
+        "health_check": "/api/health"
+    }
+
 # 1. GET /api/health
 @app.get("/api/health")
 async def health_check():
@@ -72,6 +82,7 @@ async def health_check():
         "gemini_active": client is not None,
         "github_configured": bool(GITHUB_TOKEN)
     }
+
 
 def get_realtime_context(query: str) -> str:
     try:
