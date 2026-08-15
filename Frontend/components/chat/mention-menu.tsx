@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   FileCode,
   GitPullRequest,
@@ -40,6 +40,7 @@ interface MentionMenuProps {
 
 export function MentionMenu({ query, onSelect, onClose }: MentionMenuProps) {
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const filtered = MENTION_ITEMS.filter((item) =>
     item.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -49,6 +50,19 @@ export function MentionMenu({ query, onSelect, onClose }: MentionMenuProps) {
   useEffect(() => {
     setSelectedIndex(0)
   }, [query])
+
+  // Handle click outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [onClose])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -77,20 +91,23 @@ export function MentionMenu({ query, onSelect, onClose }: MentionMenuProps) {
 
   const getCategoryIcon = (cat: MentionItem['category']) => {
     switch (cat) {
-      case 'issue': return <AlertCircle className="size-3.5 text-amber-400 shrink-0" />
-      case 'pr': return <GitPullRequest className="size-3.5 text-purple-400 shrink-0" />
-      case 'repo': return <FolderGit2 className="size-3.5 text-blue-400 shrink-0" />
-      case 'file': return <FileCode className="size-3.5 text-emerald-400 shrink-0" />
-      case 'doc': return <FileText className="size-3.5 text-sky-400 shrink-0" />
-      case 'jira': return <Kanban className="size-3.5 text-indigo-400 shrink-0" />
-      case 'slack_user': return <User className="size-3.5 text-pink-400 shrink-0" />
-      case 'slack_channel': return <Hash className="size-3.5 text-emerald-400 shrink-0" />
+      case 'issue': return <AlertCircle className="size-3.5 text-amber-500 shrink-0" />
+      case 'pr': return <GitPullRequest className="size-3.5 text-purple-500 shrink-0" />
+      case 'repo': return <FolderGit2 className="size-3.5 text-blue-500 shrink-0" />
+      case 'file': return <FileCode className="size-3.5 text-emerald-500 shrink-0" />
+      case 'doc': return <FileText className="size-3.5 text-sky-500 shrink-0" />
+      case 'jira': return <Kanban className="size-3.5 text-indigo-500 shrink-0" />
+      case 'slack_user': return <User className="size-3.5 text-pink-500 shrink-0" />
+      case 'slack_channel': return <Hash className="size-3.5 text-emerald-500 shrink-0" />
     }
   }
 
   return (
-    <div className="absolute bottom-full left-4 mb-2 w-80 max-h-64 rounded-xl bg-[#121215] border border-white/15 shadow-2xl p-1.5 z-40 text-xs overflow-y-auto select-none animate-in fade-in zoom-in-95 duration-100 no-scrollbar">
-      <div className="px-2 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center justify-between border-b border-white/[0.06] mb-1">
+    <div
+      ref={menuRef}
+      className="absolute bottom-full left-4 mb-2 w-80 max-h-64 rounded-2xl bg-popover border border-border shadow-2xl p-1.5 z-40 text-xs overflow-y-auto select-none animate-in fade-in zoom-in-95 duration-100 no-scrollbar backdrop-blur-xl"
+    >
+      <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between border-b border-border mb-1">
         <span>Mentions & References</span>
         <span className="font-mono text-[9px]">↑↓ to navigate</span>
       </div>
@@ -99,15 +116,15 @@ export function MentionMenu({ query, onSelect, onClose }: MentionMenuProps) {
         <button
           key={item.id}
           onClick={() => onSelect(item)}
-          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
-            idx === selectedIndex ? 'bg-blue-500/20 text-blue-300 font-medium' : 'text-zinc-300 hover:bg-white/[0.06]'
+          className={`w-full text-left px-2.5 py-1.5 rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
+            idx === selectedIndex ? 'bg-primary/15 text-primary font-medium' : 'text-foreground hover:bg-secondary'
           }`}
         >
           <div className="flex items-center gap-2 min-w-0 truncate">
             {getCategoryIcon(item.category)}
             <span className="truncate text-xs font-mono">{item.name}</span>
           </div>
-          <span className="text-[9px] text-zinc-500 font-mono shrink-0 ml-2">{item.details}</span>
+          <span className="text-[9px] text-muted-foreground font-mono shrink-0 ml-2">{item.details}</span>
         </button>
       ))}
     </div>

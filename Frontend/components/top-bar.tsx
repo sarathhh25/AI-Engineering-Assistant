@@ -1,9 +1,15 @@
 "use client"
 
-import { ChevronDown, Plus, Sparkles } from "lucide-react"
+import { ChevronDown, Plus, Sparkles, PanelRightOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-export function TopBar({ onNewChat }: { onNewChat: () => void }) {
+interface TopBarProps {
+  onNewChat: () => void
+  onToggleDrawer?: () => void
+  isDrawerOpen?: boolean
+}
+
+export function TopBar({ onNewChat, onToggleDrawer, isDrawerOpen }: TopBarProps) {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between px-4 sm:px-6">
       <div className="flex items-center gap-2.5">
@@ -19,15 +25,29 @@ export function TopBar({ onNewChat }: { onNewChat: () => void }) {
         </div>
       </div>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onNewChat}
-        className="gap-1.5"
-      >
-        <Plus className="size-4" />
-        New chat
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onNewChat}
+          className="gap-1.5"
+        >
+          <Plus className="size-4" />
+          New chat
+        </Button>
+
+        {onToggleDrawer && !isDrawerOpen && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleDrawer}
+            title="Open Integrations"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <PanelRightOpen className="size-4" />
+          </Button>
+        )}
+      </div>
     </header>
   )
 }

@@ -33,43 +33,49 @@ export function IntegrationSettingsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150 text-xs select-none">
-      <div className="w-full max-w-lg bg-[#121215] border border-white/15 rounded-xl shadow-2xl p-5 space-y-4 font-mono">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150 text-xs select-none"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 font-mono"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-2">
-            <div className="size-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+            <div className="size-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
               <Settings className="size-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-sm text-zinc-100 font-sans">{toolName} Configuration</h3>
-              <p className="text-[10px] text-zinc-400">Integration Settings & Webhook Preferences</p>
+              <h3 className="font-semibold text-sm text-foreground font-sans">{toolName} Configuration</h3>
+              <p className="text-[10px] text-muted-foreground">Integration Settings & Webhook Preferences</p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer"
           >
             <X className="size-4" />
           </button>
         </div>
 
         {toastMsg && (
-          <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
             {toastMsg}
           </div>
         )}
 
         {/* 1. Repository Selection */}
         <div className="space-y-1.5">
-          <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-            <GitBranch className="size-3 text-blue-400" /> Target Repository
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+            <GitBranch className="size-3 text-primary" /> Target Repository
           </label>
           <select
             value={selectedRepo}
             onChange={(e) => setSelectedRepo(e.target.value)}
-            className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none"
+            className="w-full bg-secondary border border-border rounded-xl p-2.5 text-xs text-foreground outline-none cursor-pointer"
           >
             <option value="ai-engineering-assistant">ai-engineering-assistant (Active)</option>
             <option value="Google_maps">Google_maps</option>
@@ -80,13 +86,13 @@ export function IntegrationSettingsModal({
 
         {/* 2. Branch Selection */}
         <div className="space-y-1.5">
-          <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
             Target Sync Branch
           </label>
           <select
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
-            className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none"
+            className="w-full bg-secondary border border-border rounded-xl p-2.5 text-xs text-foreground outline-none cursor-pointer"
           >
             <option value="main">main (Default Production)</option>
             <option value="develop">develop</option>
@@ -96,81 +102,75 @@ export function IntegrationSettingsModal({
 
         {/* 3. Synchronization & Webhooks */}
         <div className="space-y-1.5">
-          <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-            <RefreshCw className="size-3 text-emerald-400" /> Synchronization Frequency
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+            <RefreshCw className="size-3 text-emerald-500" /> Synchronization Frequency
           </label>
           <select
             value={syncInterval}
             onChange={(e) => setSyncInterval(e.target.value)}
-            className="w-full bg-zinc-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none"
+            className="w-full bg-secondary border border-border rounded-xl p-2.5 text-xs text-foreground outline-none cursor-pointer"
           >
-            <option value="Real-time Webhook">Real-time Webhook (Recommended)</option>
+            <option value="Real-time Webhook">Real-time Webhooks (Recommended)</option>
             <option value="Every 15 Minutes">Every 15 Minutes</option>
-            <option value="Hourly">Hourly</option>
-            <option value="Manual Only">Manual Only</option>
+            <option value="Hourly Sync">Hourly Sync</option>
+            <option value="Manual Trigger Only">Manual Trigger Only</option>
           </select>
         </div>
 
-        {/* 4. Vector Indexing Options */}
-        <div className="p-3 rounded-lg bg-zinc-950/80 border border-white/[0.06] space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-zinc-200 flex items-center gap-1.5">
-              <Database className="size-3.5 text-purple-400" /> Automatic Vector RAG Indexing
-            </span>
-            <button
-              onClick={() => setAutoIndex((prev) => !prev)}
-              className={`size-4 rounded border flex items-center justify-center ${
-                autoIndex ? 'bg-blue-600 border-blue-500 text-white' : 'border-zinc-600 bg-zinc-900'
-              }`}
-            >
-              {autoIndex && <Check className="size-3" />}
-            </button>
+        {/* 4. Permissions Checkboxes */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Access Permissions & Ingestion
           </div>
-          <p className="text-[10px] text-zinc-400 leading-relaxed font-sans">
-            Automatically chunk and generate vector embeddings when commits or issues update.
-          </p>
-        </div>
 
-        {/* 5. Permissions requested */}
-        <div className="space-y-1.5 pt-1">
-          <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-            Integration Permissions
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
-            <label className="flex items-center gap-2 p-2 rounded bg-zinc-900 border border-white/5 cursor-pointer text-zinc-300">
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 cursor-pointer text-foreground text-xs">
+              <input
+                type="checkbox"
+                checked={autoIndex}
+                onChange={(e) => setAutoIndex(e.target.checked)}
+                className="size-4 rounded border-border accent-primary"
+              />
+              <span>Automatic Codebase Vector Embeddings</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer text-foreground text-xs">
               <input
                 type="checkbox"
                 checked={readPermission}
                 onChange={(e) => setReadPermission(e.target.checked)}
+                className="size-4 rounded border-border accent-primary"
               />
-              <span>Read Repos & Issues</span>
+              <span>Read Repository Files & Commit Logs</span>
             </label>
 
-            <label className="flex items-center gap-2 p-2 rounded bg-zinc-900 border border-white/5 cursor-pointer text-zinc-300">
+            <label className="flex items-center gap-2 cursor-pointer text-foreground text-xs">
               <input
                 type="checkbox"
                 checked={writePermission}
                 onChange={(e) => setWritePermission(e.target.checked)}
+                className="size-4 rounded border-border accent-primary"
               />
-              <span>Write PR Comments</span>
+              <span>Post Automated PR Review Comments</span>
             </label>
           </div>
         </div>
 
-        {/* Action Footer */}
-        <div className="pt-3 border-t border-white/10 flex items-center justify-end gap-2">
+        {/* Footer Actions */}
+        <div className="pt-3 border-t border-border flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-300 text-xs font-sans transition-colors"
+            className="px-3.5 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs transition-colors cursor-pointer"
           >
             Cancel
           </button>
 
           <button
             onClick={handleSave}
-            className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-md shadow-blue-500/20 transition-all"
+            className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-md shadow-primary/20 transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            Save Settings
+            <Check className="size-3.5" />
+            <span>Save Configuration</span>
           </button>
         </div>
       </div>

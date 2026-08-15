@@ -75,11 +75,17 @@ export function CommandPalette({ isOpen, onClose, onSelectModel, onSelectFile }:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-xl bg-[#121215] border border-white/15 rounded-xl shadow-2xl overflow-hidden select-none">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150 p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-xl bg-popover border border-border rounded-2xl shadow-2xl overflow-hidden select-none"
+      >
         {/* Search Input Bar */}
-        <div className="flex items-center px-4 py-3 border-b border-white/10 gap-3">
-          <Search className="size-4 text-zinc-400 shrink-0" />
+        <div className="flex items-center px-4 py-3 border-b border-border gap-3">
+          <Search className="size-4 text-muted-foreground shrink-0" />
           <input
             autoFocus
             type="text"
@@ -89,9 +95,9 @@ export function CommandPalette({ isOpen, onClose, onSelectModel, onSelectFile }:
               setQuery(e.target.value)
               setSelectedIndex(0)
             }}
-            className="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
           />
-          <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-zinc-800 border border-white/10 text-zinc-400">
+          <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-secondary border border-border text-muted-foreground">
             ESC
           </kbd>
         </div>
@@ -99,27 +105,27 @@ export function CommandPalette({ isOpen, onClose, onSelectModel, onSelectFile }:
         {/* Command Items List */}
         <div className="max-h-80 overflow-y-auto p-2 space-y-1">
           {filteredItems.length === 0 ? (
-            <div className="py-8 text-center text-xs text-zinc-500">No matching commands found.</div>
+            <div className="py-8 text-center text-xs text-muted-foreground">No matching commands found.</div>
           ) : (
             filteredItems.map((item, idx) => (
               <button
                 key={item.id}
                 onClick={() => executeItem(item)}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer ${
                   selectedIndex === idx
-                    ? 'bg-blue-600/20 text-white font-medium border border-blue-500/30'
-                    : 'text-zinc-300 hover:bg-white/[0.05]'
+                    ? 'bg-primary/15 text-primary font-medium border border-primary/25'
+                    : 'text-foreground hover:bg-secondary'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <item.icon className={`size-4 ${selectedIndex === idx ? 'text-blue-400' : 'text-zinc-400'}`} />
+                  <item.icon className={`size-4 ${selectedIndex === idx ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>{item.title}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-500 font-mono">{item.category}</span>
+                  <span className="text-[10px] text-muted-foreground font-mono">{item.category}</span>
                   {item.badge && (
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-zinc-800 border border-white/10 text-zinc-400">
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-secondary border border-border text-muted-foreground">
                       {item.badge}
                     </span>
                   )}
@@ -130,13 +136,13 @@ export function CommandPalette({ isOpen, onClose, onSelectModel, onSelectFile }:
         </div>
 
         {/* Command Footer */}
-        <div className="px-4 py-2 bg-zinc-950/80 border-t border-white/10 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+        <div className="px-4 py-2 bg-muted/40 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground font-mono">
           <div className="flex items-center gap-3">
             <span>
-              <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-400">↑↓</kbd> Navigate
+              <kbd className="px-1 py-0.5 rounded bg-secondary text-foreground">↑↓</kbd> Navigate
             </span>
             <span>
-              <kbd className="px-1 py-0.5 rounded bg-zinc-800 text-zinc-400">↵</kbd> Select
+              <kbd className="px-1 py-0.5 rounded bg-secondary text-foreground">↵</kbd> Select
             </span>
           </div>
           <span>Antigravity Palette</span>

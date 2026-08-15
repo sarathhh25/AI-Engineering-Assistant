@@ -106,7 +106,7 @@ export function ChatAssistant() {
         <div className="shrink-0 px-4 pb-6 mx-auto w-full">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
             <SuggestionPills onSelect={(v: string) => send(v, [])} />
-            <ChatInput onSubmit={(text, files) => send(text, files)} />
+            <ChatInput onSubmit={(text, isRepoAware) => send(text, [])} />
           </div>
         </div>
       </div>
@@ -125,7 +125,7 @@ export function ChatAssistant() {
           >
             ✕
           </button>
-          <IntegrationsDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+          <IntegrationsDrawer open={drawerOpen} onToggle={toggleDrawer} />
         </div>
       </div>
     </div>

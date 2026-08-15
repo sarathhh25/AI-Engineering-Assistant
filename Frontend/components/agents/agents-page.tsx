@@ -13,6 +13,8 @@ import {
   ShieldAlert,
   FolderGit2,
   Terminal,
+  Sparkles,
+  Search,
 } from 'lucide-react'
 
 import { AgentExecution, WorkflowStep } from './agent-execution'
@@ -137,6 +139,12 @@ export function AgentsPage() {
   const [activeStepIndex, setActiveStepIndex] = useState(0)
   const [showOutput, setShowOutput] = useState(false)
   const [agentOutputData, setAgentOutputData] = useState<AgentOutputData | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const filteredAgents = agentsList.filter((a) =>
+    a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    a.description.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   const handleStartAgent = async (agentId: string) => {
     setRunningAgentId(agentId)
@@ -169,7 +177,7 @@ export function AgentsPage() {
           prev.map((a) => (a.id === agentId ? { ...a, status: 'Completed', recentExecutionsCount: a.recentExecutionsCount + 1 } : a))
         )
       }, 2000)
-    } catch (e: any) {
+    } catch {
       setRunningAgentId(null)
       setAgentsList((prev) =>
         prev.map((a) => (a.id === agentId ? { ...a, status: 'Idle' } : a))
@@ -187,32 +195,44 @@ export function AgentsPage() {
   return (
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 space-y-6 select-none antialiased">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <div className="size-6 rounded-md bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-              <Bot className="size-3.5" />
+            <div className="size-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+              <Bot className="size-4" />
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
               Autonomous AI Agents
             </h1>
           </div>
-          <p className="text-xs text-zinc-400">
+          <p className="text-xs text-muted-foreground">
             Execute specialized engineering agents for code review, debugging, testing, and architecture refactoring.
           </p>
         </div>
 
         <div className="flex items-center gap-2 font-mono text-xs">
-          <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[11px] font-semibold flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-blue-400 animate-pulse" />
+          <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-[11px] font-semibold flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-primary animate-pulse" />
             8 Agents Ready
           </span>
         </div>
       </div>
 
+      {/* Search Input */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="Search agents by capability..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-secondary/60 border border-border focus:border-primary/50 rounded-xl pl-9 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none transition-all"
+        />
+      </div>
+
       {/* Agents Selection Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {agentsList.map((agent) => {
+        {filteredAgents.map((agent) => {
           const Icon = agent.icon
           const isSelected = selectedAgent.id === agent.id
           const isRunning = agent.status === 'Running'
@@ -221,25 +241,25 @@ export function AgentsPage() {
             <div
               key={agent.id}
               onClick={() => setSelectedAgent(agent)}
-              className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 group ${
+              className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 group shadow-xs ${
                 isSelected
-                  ? 'bg-zinc-900 border-blue-500/40 shadow-xl'
-                  : 'bg-zinc-900/60 border-white/[0.08] hover:border-white/20'
+                  ? 'bg-card border-primary/50 shadow-md ring-1 ring-primary/20'
+                  : 'bg-card border-border hover:bg-secondary/40'
               }`}
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="size-9 rounded-lg bg-zinc-800 border border-white/10 flex items-center justify-center text-white group-hover:scale-105 transition-transform">
-                    <Icon className="size-5" />
+                  <div className="size-9 rounded-xl bg-secondary border border-border flex items-center justify-center text-foreground group-hover:scale-105 transition-transform">
+                    <Icon className="size-5 text-primary" />
                   </div>
 
                   <span
-                    className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase ${
+                    className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase border ${
                       isRunning
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse'
+                        ? 'bg-primary/10 text-primary border-primary/20 animate-pulse'
                         : agent.status === 'Completed'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-zinc-800 text-zinc-400 border border-white/5'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                        : 'bg-secondary text-muted-foreground border-border'
                     }`}
                   >
                     {agent.status}
@@ -247,16 +267,16 @@ export function AgentsPage() {
                 </div>
 
                 <div>
-                  <h3 className="font-semibold text-xs text-zinc-100 group-hover:text-blue-400 transition-colors">
+                  <h3 className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
                     {agent.name}
                   </h3>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed line-clamp-2 mt-1">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 mt-1">
                     {agent.description}
                   </p>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[10px] font-mono text-zinc-500">
+              <div className="pt-2 border-t border-border flex items-center justify-between text-[10px] font-mono text-muted-foreground">
                 <span>Model: {agent.model}</span>
                 <span>{agent.recentExecutionsCount} runs</span>
               </div>
@@ -266,89 +286,90 @@ export function AgentsPage() {
       </div>
 
       {/* Selected Agent Control Panel */}
-      {selectedAgent && (
-        <div className="p-5 rounded-xl bg-zinc-900/90 border border-white/10 space-y-5 shadow-2xl select-none">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
-            <div className="flex items-center gap-3">
-              <div className="size-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                <selectedAgent.icon className="size-5" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-white">{selectedAgent.name}</h2>
-                <p className="text-xs text-zinc-400">{selectedAgent.description}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs">
-              {runningAgentId === selectedAgent.id ? (
-                <button
-                  onClick={() => handleStopAgent(selectedAgent.id)}
-                  className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-semibold transition-all flex items-center gap-1.5"
-                >
-                  <Square className="size-3.5 fill-red-300" />
-                  <span>Stop Agent</span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleStartAgent(selectedAgent.id)}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-md shadow-blue-500/20 transition-all flex items-center gap-1.5"
-                >
-                  <Play className="size-3.5 fill-white" />
-                  <span>Start Agent</span>
-                </button>
-              )}
-            </div>
+      <div className="p-5 rounded-2xl bg-card border border-border space-y-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+              {selectedAgent.name} Control Panel
+            </h2>
+            <p className="text-xs text-muted-foreground">{selectedAgent.description}</p>
           </div>
 
-          {/* Capabilities & Tools */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-            <div className="p-3 rounded-lg bg-zinc-950/60 border border-white/[0.06] space-y-2">
-              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                Tools & Integrations
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {selectedAgent.tools.map((t) => (
-                  <span key={t} className="px-2 py-0.5 rounded bg-zinc-800 text-blue-400 text-[10px] border border-white/5">
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-zinc-950/60 border border-white/[0.06] space-y-2">
-              <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                Capabilities
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {selectedAgent.capabilities.map((c) => (
-                  <span key={c} className="px-2 py-0.5 rounded bg-zinc-800 text-purple-400 text-[10px] border border-white/5">
-                    {c}
-                  </span>
-                ))}
-              </div>
-            </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {runningAgentId === selectedAgent.id ? (
+              <button
+                onClick={() => handleStopAgent(selectedAgent.id)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                <Square className="size-3.5 fill-red-500" />
+                <span>Stop Agent</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => handleStartAgent(selectedAgent.id)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-md shadow-primary/20 transition-all cursor-pointer"
+              >
+                <Play className="size-3.5 fill-current" />
+                <span>Execute Agent</span>
+              </button>
+            )}
           </div>
-
-          {/* Workflow Execution View */}
-          {(runningAgentId === selectedAgent.id || selectedAgent.status === 'Running') && (
-            <AgentExecution
-              agentName={selectedAgent.name}
-              currentStepIndex={activeStepIndex}
-              steps={DEMO_STEPS}
-            />
-          )}
-
-          {/* Agent Output View */}
-          {showOutput && agentOutputData && (
-            <AgentOutput
-              agentName={selectedAgent.name}
-              output={agentOutputData}
-              onApprove={() => alert('Agent modifications approved and merged.')}
-              onReject={() => alert('Agent changes rejected.')}
-              onRetry={() => handleStartAgent(selectedAgent.id)}
-            />
-          )}
         </div>
+
+        {/* Capabilities & Tools Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
+          <div className="space-y-1.5">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+              Capabilities
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedAgent.capabilities.map((cap) => (
+                <span
+                  key={cap}
+                  className="px-2 py-0.5 rounded-md bg-secondary text-foreground text-[10px] border border-border"
+                >
+                  {cap}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+              Connected Tools
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedAgent.tools.map((tool) => (
+                <span
+                  key={tool}
+                  className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] border border-primary/20"
+                >
+                  {tool}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Execution Workflow (Live Pipeline) */}
+      {runningAgentId && (
+        <AgentExecution
+          agentName={selectedAgent.name}
+          currentStepIndex={activeStepIndex}
+          steps={DEMO_STEPS}
+        />
+      )}
+
+      {/* Agent Final Output Proposal */}
+      {showOutput && agentOutputData && (
+        <AgentOutput
+          agentName={selectedAgent.name}
+          output={agentOutputData}
+          onApprove={() => alert('Changes approved & committed!')}
+          onReject={() => alert('Changes rejected.')}
+          onRetry={() => handleStartAgent(selectedAgent.id)}
+        />
       )}
     </div>
   )

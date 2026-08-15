@@ -76,50 +76,50 @@ export function RepositoryExplorer({
   return (
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 space-y-4 select-none antialiased h-full flex flex-col">
       {/* 1. GitHub Repository Telemetry Header Bar */}
-      <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shrink-0">
+      <div className="p-4 rounded-2xl bg-card border border-border flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm shrink-0">
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="size-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+            <div className="size-7 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
               <FolderGit2 className="size-4" />
             </div>
 
-            <h1 className="text-lg font-bold tracking-tight text-white font-mono truncate">
+            <h1 className="text-lg font-bold tracking-tight text-foreground font-mono truncate">
               {repoDetails.owner}/{repoDetails.name}
             </h1>
 
             <div className="flex items-center gap-1.5 font-mono text-[10px]">
-              <span className="px-2 py-0.5 rounded bg-zinc-800 text-amber-400 border border-white/5 flex items-center gap-1">
-                <Star className="size-3 fill-amber-400" /> {repoDetails.stars.toLocaleString()} stars
+              <span className="px-2 py-0.5 rounded-md bg-secondary text-amber-500 border border-border flex items-center gap-1">
+                <Star className="size-3 fill-amber-500" /> {repoDetails.stars.toLocaleString()} stars
               </span>
 
-              <span className="px-2 py-0.5 rounded bg-zinc-800 text-blue-400 border border-white/5">
+              <span className="px-2 py-0.5 rounded-md bg-secondary text-primary border border-border">
                 {repoDetails.language}
               </span>
 
-              <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1">
                 <GitPullRequest className="size-3" /> {repoDetails.open_prs_count} PRs
               </span>
 
-              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+              <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
                 <AlertCircle className="size-3" /> {repoDetails.open_issues_count} Issues
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-400">
+          <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
             {/* Branch Selector */}
-            <div className="flex items-center gap-1 text-zinc-300 bg-zinc-950 px-2 py-0.5 rounded border border-white/10">
-              <GitBranch className="size-3 text-emerald-400 shrink-0" />
+            <div className="flex items-center gap-1 text-foreground bg-secondary px-2 py-0.5 rounded-md border border-border">
+              <GitBranch className="size-3 text-emerald-500 shrink-0" />
               <select
                 value={selectedBranch}
                 onChange={(e) => {
                   setSelectedBranch(e.target.value)
                   showToast(`Switched to branch '${e.target.value}'`)
                 }}
-                className="bg-transparent text-zinc-200 outline-none text-[11px] cursor-pointer"
+                className="bg-transparent text-foreground outline-none text-[11px] cursor-pointer"
               >
                 {branches.map((b) => (
-                  <option key={b} value={b} className="bg-zinc-900 text-white">
+                  <option key={b} value={b} className="bg-popover text-foreground">
                     {b}
                   </option>
                 ))}
@@ -128,10 +128,10 @@ export function RepositoryExplorer({
 
             <span>•</span>
             <span className="flex items-center gap-1">
-              <GitCommit className="size-3 text-blue-400" /> {repoDetails.commits_count} Commits
+              <GitCommit className="size-3 text-primary" /> {repoDetails.commits_count} Commits
             </span>
             <span>•</span>
-            <span className="text-zinc-500 truncate">GitHub Connected (Secure API)</span>
+            <span className="text-muted-foreground truncate">GitHub Connected (Secure API)</span>
           </div>
         </div>
 
@@ -139,23 +139,23 @@ export function RepositoryExplorer({
         <div className="flex items-center gap-2 shrink-0 text-xs">
           <button
             onClick={() => showToast('Repository pull sync requested.')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer"
           >
-            <GitPullRequest className="size-3.5 text-blue-400" />
+            <GitPullRequest className="size-3.5 text-primary" />
             <span>Pull</span>
           </button>
 
           <button
             onClick={() => showToast('git clone https://github.com/Sarath/ai-engineering-assistant copied!')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer"
           >
-            <Download className="size-3.5 text-emerald-400" />
+            <Download className="size-3.5 text-emerald-500" />
             <span>Clone</span>
           </button>
 
           <button
             onClick={() => showToast('Search Repository modal opened.')}
-            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors border border-white/10"
+            className="p-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors border border-border cursor-pointer"
             title="Search Repository"
           >
             <Search className="size-4" />
@@ -163,7 +163,7 @@ export function RepositoryExplorer({
 
           <button
             onClick={() => showToast('Repository settings opened.')}
-            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors border border-white/10"
+            className="p-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors border border-border cursor-pointer"
             title="Repository Settings"
           >
             <Settings className="size-4" />
@@ -173,7 +173,7 @@ export function RepositoryExplorer({
 
       {/* Toast Feedback */}
       {toastMsg && (
-        <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono animate-in fade-in duration-150">
+        <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-mono animate-in fade-in duration-150">
           {toastMsg}
         </div>
       )}
@@ -181,23 +181,23 @@ export function RepositoryExplorer({
       {/* 2. Main 2-Pane Explorer Content Area */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 min-h-0 overflow-hidden">
         {/* Left Explorer Pane (4 cols) */}
-        <div className="md:col-span-4 rounded-xl border border-white/10 bg-[#0c0c0e] p-3 flex flex-col space-y-3 overflow-hidden">
+        <div className="md:col-span-4 rounded-2xl border border-border bg-card p-3 flex flex-col space-y-3 overflow-hidden shadow-xs">
           <RepositorySearch onSearch={(q, cat) => console.log('Searching', q, cat)} />
 
           {/* Left Pane Switcher */}
-          <div className="grid grid-cols-2 gap-1 p-0.5 bg-zinc-900 rounded-lg border border-white/5 text-xs">
+          <div className="grid grid-cols-2 gap-1 p-0.5 bg-secondary rounded-xl border border-border text-xs">
             <button
               onClick={() => setActivePane('explorer')}
-              className={`py-1 rounded-md font-medium text-[11px] transition-all ${
-                activePane === 'explorer' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              className={`py-1 rounded-lg font-medium text-[11px] transition-all cursor-pointer ${
+                activePane === 'explorer' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Files Explorer
             </button>
             <button
               onClick={() => setActivePane('git')}
-              className={`py-1 rounded-md font-medium text-[11px] transition-all ${
-                activePane === 'git' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              className={`py-1 rounded-lg font-medium text-[11px] transition-all cursor-pointer ${
+                activePane === 'git' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Git Changes (4)

@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { AuthPage } from '@/components/auth/auth-page'
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 }
 
 export default function LoginPage() {
-  return <AuthPage />
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#09090b]" />}>
+      <AuthPage />
+    </Suspense>
+  )
 }

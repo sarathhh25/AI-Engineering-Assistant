@@ -21,27 +21,27 @@ export function CodeBlock({ language = 'typescript', filename, code }: CodeBlock
   const lines = code.trim().split('\n')
 
   return (
-    <div className="my-3 rounded-xl border border-white/10 bg-[#0c0c0e] overflow-hidden shadow-lg font-mono text-xs select-none">
+    <div className="my-3 rounded-xl border border-border bg-card overflow-hidden shadow-sm font-mono text-xs select-none">
       {/* Header Bar */}
-      <div className="px-3.5 py-1.5 bg-zinc-900/90 border-b border-white/[0.08] flex items-center justify-between">
+      <div className="px-3.5 py-1.5 bg-muted/60 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <FileCode className="size-3.5 text-blue-400 shrink-0" />
-          <span className="text-zinc-200 font-medium text-[11px]">
+          <FileCode className="size-3.5 text-primary shrink-0" />
+          <span className="text-foreground font-medium text-[11px]">
             {filename || `example.${language === 'python' ? 'py' : 'ts'}`}
           </span>
-          <span className="text-[9px] uppercase font-semibold text-zinc-500 bg-zinc-800 px-1.5 py-0.2 rounded border border-white/5">
+          <span className="text-[9px] uppercase font-semibold text-muted-foreground bg-secondary px-1.5 py-0.2 rounded border border-border">
             {language}
           </span>
         </div>
 
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-800/80 hover:bg-zinc-800 border border-white/10 transition-colors"
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded bg-secondary hover:bg-secondary/80 border border-border transition-colors cursor-pointer"
         >
           {copied ? (
             <>
-              <Check className="size-3 text-emerald-400" />
-              <span className="text-emerald-400 font-medium">Copied!</span>
+              <Check className="size-3 text-emerald-500" />
+              <span className="text-emerald-500 font-medium">Copied!</span>
             </>
           ) : (
             <>
@@ -53,15 +53,15 @@ export function CodeBlock({ language = 'typescript', filename, code }: CodeBlock
       </div>
 
       {/* Code Area with Line Numbers */}
-      <div className="p-3 bg-[#08080a] overflow-x-auto text-zinc-200 leading-relaxed font-mono">
+      <div className="p-3 bg-muted/20 overflow-x-auto text-foreground leading-relaxed font-mono">
         <table className="w-full text-left border-collapse">
           <tbody>
             {lines.map((line, idx) => (
-              <tr key={idx} className="hover:bg-white/[0.03] transition-colors">
-                <td className="pr-4 select-none text-right text-zinc-600 text-[10px] w-8">
+              <tr key={idx} className="hover:bg-muted/40 transition-colors">
+                <td className="pr-4 select-none text-right text-muted-foreground/60 text-[10px] w-8">
                   {idx + 1}
                 </td>
-                <td className="whitespace-pre font-mono text-[11px] text-zinc-200">
+                <td className="whitespace-pre font-mono text-[11px] text-foreground">
                   {line}
                 </td>
               </tr>

@@ -96,9 +96,9 @@ export function AppShell() {
       <SidebarLeft
         activeNav={activeTab}
         setActiveNav={(nav) => {
-          if (nav === 'projects' || nav === 'repositories' || nav === 'agents' || nav === 'knowledge-base') {
+          if (nav === 'projects' || nav === 'knowledge-base') {
             setDialogType(nav === 'knowledge-base' ? 'knowledge' : (nav as any))
-          } else if (nav === 'dashboard' || nav === 'recent-chats') {
+          } else if (nav === 'recent-chats') {
             setActiveTab('chat')
           } else {
             setActiveTab(nav as any)
@@ -121,7 +121,13 @@ export function AppShell() {
         {/* Top Header for Center Workspace */}
         <TopNav
           activeTabTitle={
-            activeTab === 'integrations'
+            activeTab === 'dashboard'
+              ? 'Engineering Dashboard'
+              : activeTab === 'agents'
+              ? 'Autonomous AI Agents'
+              : activeTab === 'repositories'
+              ? 'Repository Explorer'
+              : activeTab === 'integrations'
               ? 'Integrations & Tools'
               : activeTab === 'settings'
               ? 'Settings & Preferences'

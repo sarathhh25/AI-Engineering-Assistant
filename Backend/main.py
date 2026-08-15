@@ -5,14 +5,14 @@ from typing import Optional, List
 from google import genai
 from google.genai import types
 from duckduckgo_search import DDGS
-from github import Github
+from github import Github, Auth
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip().strip(' "\'')
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
 
 app = FastAPI(title="AI Engineering Copilot Backend API")
 
@@ -100,7 +100,7 @@ def get_github_context(query: str, repo_name: str) -> str:
     if not GITHUB_TOKEN:
         return f"GitHub token not set. Querying local context for {repo_name}."
     try:
-        g = Github(GITHUB_TOKEN)
+        g = Github(auth=Auth.Token(GITHUB_TOKEN))
         repo = g.get_repo(repo_name)
         github_data = f"ACTIVE REPOSITORY: {repo_name}\n"
         pulls = repo.get_pulls(state='open', sort='updated', direction='desc')
@@ -150,15 +150,29 @@ async def chat_endpoint(request: ChatRequest):
             full_prompt += f"\n<attached_files>\n{files_section}\n</attached_files>"
 
         if client:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=full_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.2
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=full_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=0.2
+                    )
                 )
-            )
-            return {"reply": response.text, "status": "success"}
+                return {"reply": response.text, "status": "success"}
+            except Exception as gen_err:
+                try:
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=full_prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_instruction,
+                            temperature=0.2
+                        )
+                    )
+                    return {"reply": response.text, "status": "success"}
+                except Exception:
+                    raise gen_err
         else:
             file_info = f" with {len(attached_files)} attached file(s) ({', '.join(f.fileName for f in attached_files)})" if attached_files else ""
             return {
@@ -189,7 +203,7 @@ async def github_repository_endpoint(request: RepositoryRequest):
     repo_name = request.repo
     if GITHUB_TOKEN:
         try:
-            g = Github(GITHUB_TOKEN)
+            g = Github(auth=Auth.Token(GITHUB_TOKEN))
             repo = g.get_repo(repo_name)
             return {
                 "name": repo.name,

@@ -40,11 +40,11 @@ export function FileTreeItem({
   const isSelected = selectedFileId === item.id
 
   const getFileIcon = (fileName: string) => {
-    if (fileName.endsWith('.tsx') || fileName.endsWith('.ts')) return <FileCode className="size-3.5 text-blue-400 shrink-0" />
-    if (fileName.endsWith('.css')) return <FileCode className="size-3.5 text-sky-300 shrink-0" />
-    if (fileName.endsWith('.py')) return <FileCode className="size-3.5 text-emerald-400 shrink-0" />
-    if (fileName.endsWith('.json')) return <FileJson className="size-3.5 text-amber-400 shrink-0" />
-    return <FileText className="size-3.5 text-zinc-400 shrink-0" />
+    if (fileName.endsWith('.tsx') || fileName.endsWith('.ts')) return <FileCode className="size-3.5 text-blue-500 shrink-0" />
+    if (fileName.endsWith('.css')) return <FileCode className="size-3.5 text-sky-500 shrink-0" />
+    if (fileName.endsWith('.py')) return <FileCode className="size-3.5 text-emerald-500 shrink-0" />
+    if (fileName.endsWith('.json')) return <FileJson className="size-3.5 text-amber-500 shrink-0" />
+    return <FileText className="size-3.5 text-muted-foreground shrink-0" />
   }
 
   return (
@@ -55,21 +55,21 @@ export function FileTreeItem({
           else onSelectFile(item)
         }}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        className={`w-full flex items-center justify-between py-1 pr-2 rounded-md transition-colors group ${
+        className={`w-full flex items-center justify-between py-1 pr-2 rounded-lg transition-colors group cursor-pointer ${
           isSelected
-            ? 'bg-blue-500/15 text-blue-300 font-medium'
-            : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+            ? 'bg-primary/15 text-primary font-medium border border-primary/20'
+            : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
         }`}
       >
         <div className="flex items-center gap-1.5 min-w-0 truncate">
           {isFolder ? (
             <>
               {isExpanded ? (
-                <ChevronDown className="size-3 text-zinc-500 shrink-0" />
+                <ChevronDown className="size-3 text-muted-foreground shrink-0" />
               ) : (
-                <ChevronRight className="size-3 text-zinc-500 shrink-0" />
+                <ChevronRight className="size-3 text-muted-foreground shrink-0" />
               )}
-              <Folder className="size-3.5 text-amber-400/80 group-hover:text-amber-400 shrink-0" />
+              <Folder className="size-3.5 text-amber-500 shrink-0" />
             </>
           ) : (
             <>
@@ -84,10 +84,10 @@ export function FileTreeItem({
           <span
             className={`text-[9px] font-mono px-1 rounded uppercase font-semibold ${
               item.status === 'modified'
-                ? 'text-amber-400 bg-amber-400/10'
+                ? 'text-amber-600 dark:text-amber-400 bg-amber-400/10'
                 : item.status === 'added'
-                ? 'text-emerald-400 bg-emerald-400/10'
-                : 'text-zinc-500'
+                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-400/10'
+                : 'text-muted-foreground'
             }`}
           >
             {item.status === 'modified' ? 'M' : item.status === 'added' ? 'A' : '✓'}

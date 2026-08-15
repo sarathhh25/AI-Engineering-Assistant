@@ -20,7 +20,7 @@ export function RecentRepositories({ onSelectRepo, onViewAll }: RecentRepositori
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between text-xs">
-        <h2 className="font-semibold text-zinc-200 uppercase tracking-wider text-[11px]">
+        <h2 className="font-semibold text-foreground uppercase tracking-wider text-[11px]">
           Recent Repositories
         </h2>
         <button
@@ -28,25 +28,25 @@ export function RecentRepositories({ onSelectRepo, onViewAll }: RecentRepositori
             if (onViewAll) onViewAll()
             else alert('View all repositories triggered')
           }}
-          className="text-blue-400 hover:text-blue-300 transition-colors text-[11px] font-medium flex items-center gap-1"
+          className="text-primary hover:underline transition-colors text-[11px] font-medium flex items-center gap-1 cursor-pointer"
         >
           View all repositories <ArrowRight className="size-3" />
         </button>
       </div>
 
-      <div className="rounded-xl border border-white/[0.08] bg-zinc-900/60 overflow-x-auto select-none">
+      <div className="rounded-2xl border border-border bg-card overflow-x-auto select-none shadow-xs">
         <table className="w-full text-left text-xs font-mono">
-          <thead className="bg-zinc-950/80 text-[10px] text-zinc-500 uppercase border-b border-white/[0.06]">
+          <thead className="bg-muted/80 text-[10px] text-muted-foreground uppercase border-b border-border">
             <tr>
-              <th className="py-2.5 px-3 font-semibold">Repository</th>
+              <th className="py-2.5 px-3.5 font-semibold">Repository</th>
               <th className="py-2.5 px-3 font-semibold">Owner</th>
               <th className="py-2.5 px-3 font-semibold">Language</th>
               <th className="py-2.5 px-3 font-semibold">Branch</th>
               <th className="py-2.5 px-3 font-semibold">Updated</th>
-              <th className="py-2.5 px-3 font-semibold text-right">Status</th>
+              <th className="py-2.5 px-3.5 font-semibold text-right">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/[0.04] text-zinc-300">
+          <tbody className="divide-y divide-border/60 text-foreground">
             {REPOS.map((repo) => (
               <RepositoryRow key={repo.id} repo={repo} onSelect={onSelectRepo} />
             ))}

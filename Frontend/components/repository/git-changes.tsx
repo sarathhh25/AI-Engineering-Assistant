@@ -26,11 +26,11 @@ interface GitChangesProps {
 export function GitChanges({ selectedFile, onSelectFile }: GitChangesProps) {
   return (
     <div className="space-y-3 select-none text-xs">
-      <div className="flex items-center justify-between text-zinc-400 font-semibold uppercase tracking-wider text-[10px]">
+      <div className="flex items-center justify-between text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">
         <span className="flex items-center gap-1.5">
-          <GitBranch className="size-3.5 text-emerald-400" /> Git Source Control
+          <GitBranch className="size-3.5 text-emerald-500" /> Git Source Control
         </span>
-        <span className="text-zinc-500 font-mono">4 changed files</span>
+        <span className="text-muted-foreground font-mono">4 changed files</span>
       </div>
 
       <div className="space-y-1">
@@ -41,27 +41,27 @@ export function GitChanges({ selectedFile, onSelectFile }: GitChangesProps) {
             <div
               key={item.id}
               onClick={() => onSelectFile(item.filename)}
-              className={`p-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-between font-mono text-[11px] ${
+              className={`p-2 rounded-xl border transition-colors cursor-pointer flex items-center justify-between font-mono text-[11px] ${
                 isSelected
-                  ? 'bg-blue-500/15 border-blue-500/30 text-white'
-                  : 'bg-zinc-900/60 border-white/[0.04] text-zinc-300 hover:bg-white/[0.04]'
+                  ? 'bg-primary/15 border-primary/30 text-primary font-medium shadow-xs'
+                  : 'bg-card border-border text-foreground hover:bg-secondary/60'
               }`}
             >
               <div className="flex items-center gap-2 truncate">
-                <FileCode className="size-3.5 text-blue-400 shrink-0" />
+                <FileCode className="size-3.5 text-primary shrink-0" />
                 <span className="truncate">{item.filename}</span>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-emerald-400 text-[10px]">+{item.additions}</span>
-                <span className="text-amber-400 text-[10px]">-{item.deletions}</span>
+                <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">+{item.additions}</span>
+                <span className="text-amber-600 dark:text-amber-400 text-[10px]">-{item.deletions}</span>
                 <span
-                  className={`text-[9px] font-bold px-1 rounded uppercase ${
+                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase border ${
                     item.status === 'staged'
-                      ? 'bg-emerald-500/20 text-emerald-300'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                       : item.status === 'modified'
-                      ? 'bg-amber-500/20 text-amber-300'
-                      : 'bg-zinc-800 text-zinc-400'
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                      : 'bg-secondary text-muted-foreground border-border'
                   }`}
                 >
                   {item.status === 'staged' ? 'S' : item.status === 'modified' ? 'M' : 'U'}

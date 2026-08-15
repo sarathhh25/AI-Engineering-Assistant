@@ -18,7 +18,7 @@ export function IntegrationFilters({
   totalCount,
 }: IntegrationFiltersProps) {
   return (
-    <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-white/[0.08] text-xs select-none">
+    <div className="flex items-center gap-1 bg-secondary p-1 rounded-2xl border border-border text-xs select-none">
       {[
         { id: 'all', label: `All (${totalCount})` },
         { id: 'connected', label: `Connected (${connectedCount})` },
@@ -27,10 +27,10 @@ export function IntegrationFilters({
         <button
           key={tab.id}
           onClick={() => onSelectFilter(tab.id as IntegrationFilterType)}
-          className={`px-3 py-1 rounded-lg font-medium transition-all ${
+          className={`px-3.5 py-1.5 rounded-xl font-medium transition-all cursor-pointer ${
             activeFilter === tab.id
-              ? 'bg-zinc-800 text-white shadow-sm'
-              : 'text-zinc-400 hover:text-zinc-200'
+              ? 'bg-card text-foreground shadow-xs font-semibold'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
         >
           {tab.label}

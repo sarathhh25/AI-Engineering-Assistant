@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Sun,
   Moon,
@@ -30,10 +30,30 @@ export function TopNav({
   const [mounted, setMounted] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const notifRef = useRef<HTMLDivElement>(null)
+  const profileRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Handle click outside for notifications and profile popovers
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotificationsOpen(false)
+      }
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false)
+      }
+    }
+    if (notificationsOpen || profileOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [notificationsOpen, profileOpen])
 
   const toggleTheme = () => {
     const isDark = (resolvedTheme || theme) === 'dark'
@@ -78,8 +98,8 @@ export function TopNav({
             )}
           </button>
 
-          {/* Notifications Button & Popover */}
-          <div className="relative">
+          {/* Notifications Button & Popover with Outside Click Ref */}
+          <div ref={notifRef} className="relative">
             <button
               onClick={() => {
                 setNotificationsOpen((prev) => !prev)
@@ -129,8 +149,8 @@ export function TopNav({
 
           <div className="h-4 w-px bg-border mx-0.5 hidden sm:block" />
 
-          {/* User Profile Menu */}
-          <div className="relative">
+          {/* User Profile Menu with Outside Click Ref */}
+          <div ref={profileRef} className="relative">
             <button
               onClick={() => {
                 setProfileOpen((prev) => !prev)

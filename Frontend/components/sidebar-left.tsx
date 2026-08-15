@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Sparkles,
   Search,
@@ -18,6 +18,9 @@ import {
   Sliders,
   Coins,
   ChevronUp,
+  Pin,
+  Trash2,
+  MoreVertical,
 } from 'lucide-react'
 
 export interface ChatItem {
@@ -65,14 +68,55 @@ export function SidebarLeft({
   const [activeNav, setActiveNav] = useState(externalActiveNav || 'chat')
   const [internalChats, setInternalChats] = useState<ChatItem[]>(DEFAULT_CHATS)
   const chats = externalChats || internalChats
+  const setChats = externalSetChats || setInternalChats
   const [profilePopoverOpen, setProfilePopoverOpen] = useState(false)
+  const profileRef = useRef<HTMLDivElement>(null)
+
+  // Handle click outside profile popover
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfilePopoverOpen(false)
+      }
+    }
+    if (profilePopoverOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [profilePopoverOpen])
 
   const handleNavClick = (navId: string) => {
     setActiveNav(navId)
     if (externalSetActiveNav) externalSetActiveNav(navId)
   }
 
+  const handleChatClick = (id: string) => {
+    handleNavClick('chat')
+    if (onSelectChat) onSelectChat(id)
+  }
+
+  const togglePinChat = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    const updated = chats.map((c) => (c.id === id ? { ...c, isPinned: !c.isPinned } : c))
+    setChats(updated)
+  }
+
+  const deleteChat = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    const updated = chats.filter((c) => c.id !== id)
+    setChats(updated)
+    if (externalActiveChatId === id && updated.length > 0) {
+      if (onSelectChat) onSelectChat(updated[0].id)
+    }
+  }
+
   const currentNav = externalActiveNav || activeNav
+  const pinnedChats = chats.filter((c) => c.isPinned)
+  const unpinnedChats = chats.filter((c) => !c.isPinned)
+
+  const timeGroups: ('Today' | 'Yesterday' | 'This Week')[] = ['Today', 'Yesterday', 'This Week']
 
   return (
     <aside className="h-full w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground flex flex-col justify-between select-none z-30 font-sans">
@@ -97,7 +141,7 @@ export function SidebarLeft({
         {/* Search Workspace Bar */}
         <button
           onClick={onSearchClick}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-sidebar-accent/60 hover:bg-sidebar-accent border border-sidebar-border text-muted-foreground hover:text-sidebar-foreground transition-all text-xs group"
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-sidebar-accent/60 hover:bg-sidebar-accent border border-sidebar-border text-muted-foreground hover:text-sidebar-foreground transition-all text-xs group cursor-pointer"
         >
           <div className="flex items-center gap-2 truncate">
             <Search className="size-3.5 text-muted-foreground group-hover:text-sidebar-foreground" />
@@ -118,7 +162,7 @@ export function SidebarLeft({
         </button>
       </div>
 
-      {/* 2. Main Navigation List */}
+      {/* 2. Main Scrollable Navigation and Chat History List */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-4 text-xs no-scrollbar">
         {/* Core Navigation Items */}
         <div className="space-y-1">
@@ -128,24 +172,20 @@ export function SidebarLeft({
 
           {[
             { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'recent-chats', label: 'Recent Chats', icon: MessageSquare, badge: chats.length.toString() },
+            { id: 'chat', label: 'Chat Workspace', icon: MessageSquare, badge: chats.length.toString() },
             { id: 'projects', label: 'Projects', icon: FolderKanban },
             { id: 'repositories', label: 'Repositories', icon: GitBranch },
             { id: 'agents', label: 'Agents', icon: Bot, badge: '8' },
             { id: 'knowledge-base', label: 'Knowledge Base', icon: BookOpen },
           ].map((item) => {
-            const isActive =
-              currentNav === item.id ||
-              (item.id === 'recent-chats' && (currentNav === 'chat' || currentNav === 'recent-chats'))
+            const isActive = currentNav === item.id
             const Icon = item.icon
 
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  handleNavClick(item.id)
-                }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition-all group ${
+                onClick={() => handleNavClick(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition-all group cursor-pointer ${
                   isActive
                     ? 'bg-primary/15 text-primary border border-primary/25 font-semibold shadow-xs'
                     : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
@@ -173,6 +213,112 @@ export function SidebarLeft({
         {/* Divider */}
         <div className="border-t border-sidebar-border my-2" />
 
+        {/* Recent Conversations List */}
+        <div className="space-y-3">
+          <div className="px-2.5 flex items-center justify-between text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
+            <span>Recent Chats</span>
+            <span className="font-mono text-[9px] lowercase">{chats.length} threads</span>
+          </div>
+
+          {/* Pinned Chats */}
+          {pinnedChats.length > 0 && (
+            <div className="space-y-0.5">
+              <div className="px-2.5 py-0.5 text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider flex items-center gap-1">
+                <Pin className="size-2.5 rotate-45 text-amber-500" /> Pinned
+              </div>
+              {pinnedChats.map((chat) => {
+                const isSelected = currentNav === 'chat' && externalActiveChatId === chat.id
+                return (
+                  <div
+                    key={chat.id}
+                    onClick={() => handleChatClick(chat.id)}
+                    className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
+                      isSelected
+                        ? 'bg-primary/15 text-primary font-medium border border-primary/20'
+                        : 'text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate min-w-0">
+                      <MessageSquare className={`size-3 shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <span className="truncate text-[11px]">{chat.title}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => togglePinChat(e, chat.id)}
+                        className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-amber-500 transition-colors"
+                        title="Unpin chat"
+                      >
+                        <Pin className="size-3 fill-amber-500 text-amber-500" />
+                      </button>
+                      <button
+                        onClick={(e) => deleteChat(e, chat.id)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Delete chat"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Grouped Timeframe Chats */}
+          {timeGroups.map((grp) => {
+            const groupChats = unpinnedChats.filter((c) => c.group === grp)
+            if (groupChats.length === 0) return null
+
+            return (
+              <div key={grp} className="space-y-0.5">
+                <div className="px-2.5 py-0.5 text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider">
+                  {grp}
+                </div>
+                {groupChats.map((chat) => {
+                  const isSelected = currentNav === 'chat' && externalActiveChatId === chat.id
+                  return (
+                    <div
+                      key={chat.id}
+                      onClick={() => handleChatClick(chat.id)}
+                      className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
+                        isSelected
+                          ? 'bg-primary/15 text-primary font-medium border border-primary/20'
+                          : 'text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate min-w-0">
+                        <MessageSquare className={`size-3 shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <span className="truncate text-[11px]">{chat.title}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => togglePinChat(e, chat.id)}
+                          className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-amber-500 transition-colors"
+                          title="Pin chat"
+                        >
+                          <Pin className="size-3" />
+                        </button>
+                        <button
+                          onClick={(e) => deleteChat(e, chat.id)}
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Delete chat"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-sidebar-border my-2" />
+
         {/* Secondary Section: Integrations & Settings */}
         <div className="space-y-1">
           <div className="px-2.5 py-1 text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
@@ -190,7 +336,7 @@ export function SidebarLeft({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition-all group ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition-all group cursor-pointer ${
                   isActive
                     ? 'bg-primary/15 text-primary border border-primary/25 font-semibold shadow-xs'
                     : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
@@ -210,8 +356,8 @@ export function SidebarLeft({
         </div>
       </div>
 
-      {/* 3. Bottom User Profile Section */}
-      <div className="p-2.5 border-t border-sidebar-border bg-sidebar relative shrink-0">
+      {/* 3. Bottom User Profile Section with Click-Outside Ref */}
+      <div ref={profileRef} className="p-2.5 border-t border-sidebar-border bg-sidebar relative shrink-0">
         {/* Profile Popover Menu */}
         {profilePopoverOpen && (
           <div className="absolute bottom-full left-2 right-2 mb-2 bg-popover border border-border rounded-2xl shadow-2xl p-1.5 z-50 text-xs font-sans animate-in fade-in duration-100 space-y-1 backdrop-blur-xl">

@@ -24,10 +24,10 @@ export function EngineeringOverview() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between text-xs">
-        <h2 className="font-semibold text-zinc-200 uppercase tracking-wider text-[11px]">
+        <h2 className="font-semibold text-foreground uppercase tracking-wider text-[11px]">
           Engineering Overview
         </h2>
-        <span className="text-zinc-500 text-[10px]">Real-time Metrics</span>
+        <span className="text-muted-foreground text-[10px] font-mono">Real-time Metrics</span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

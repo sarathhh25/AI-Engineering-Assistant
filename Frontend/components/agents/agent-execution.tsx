@@ -20,14 +20,14 @@ interface AgentExecutionProps {
 
 export function AgentExecution({ agentName, currentStepIndex, steps }: AgentExecutionProps) {
   return (
-    <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/10 space-y-4 select-none font-mono text-xs shadow-xl">
-      <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+    <div className="p-5 rounded-2xl bg-card border border-border space-y-4 select-none font-mono text-xs shadow-sm">
+      <div className="flex items-center justify-between border-b border-border pb-3">
         <div>
-          <h3 className="font-semibold text-sm text-zinc-100 font-sans">{agentName} Execution Workflow</h3>
-          <p className="text-[10px] text-zinc-400">Autonomous Execution Pipeline</p>
+          <h3 className="font-semibold text-sm text-foreground font-sans">{agentName} Execution Workflow</h3>
+          <p className="text-[10px] text-muted-foreground">Autonomous Execution Pipeline</p>
         </div>
 
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-semibold">
           <Loader2 className="size-3 animate-spin" />
           <span>Step {currentStepIndex + 1} of {steps.length}</span>
         </div>
@@ -44,16 +44,16 @@ export function AgentExecution({ agentName, currentStepIndex, steps }: AgentExec
               <div
                 className={`size-8 rounded-full border flex items-center justify-center font-bold text-xs transition-all ${
                   isDone
-                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                     : isCurrent
-                    ? 'bg-blue-500/20 border-blue-500/40 text-blue-400 animate-pulse'
-                    : 'bg-zinc-950 border-white/10 text-zinc-600'
+                    ? 'bg-primary/15 border-primary/40 text-primary animate-pulse'
+                    : 'bg-muted border-border text-muted-foreground'
                 }`}
               >
                 {isDone ? (
-                  <CheckCircle2 className="size-4 text-emerald-400" />
+                  <CheckCircle2 className="size-4 text-emerald-500" />
                 ) : isCurrent ? (
-                  <Loader2 className="size-4 animate-spin text-blue-400" />
+                  <Loader2 className="size-4 animate-spin text-primary" />
                 ) : (
                   <span>{idx + 1}</span>
                 )}
@@ -61,10 +61,10 @@ export function AgentExecution({ agentName, currentStepIndex, steps }: AgentExec
               <span
                 className={`text-[10px] font-semibold ${
                   isDone
-                    ? 'text-emerald-400'
+                    ? 'text-emerald-600 dark:text-emerald-400'
                     : isCurrent
-                    ? 'text-blue-300 font-bold'
-                    : 'text-zinc-500'
+                    ? 'text-primary font-bold'
+                    : 'text-muted-foreground'
                 }`}
               >
                 {step.label}
@@ -75,9 +75,9 @@ export function AgentExecution({ agentName, currentStepIndex, steps }: AgentExec
       </div>
 
       {/* Step Log Snippet Container */}
-      <div className="p-3 rounded-lg bg-[#08080a] border border-white/[0.06] space-y-1">
-        <div className="text-[9px] text-zinc-500 uppercase tracking-wider font-semibold">Live Telemetry Log</div>
-        <div className="text-[11px] text-zinc-300 leading-relaxed font-mono">
+      <div className="p-3.5 rounded-xl bg-muted/30 border border-border space-y-1">
+        <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Live Telemetry Log</div>
+        <div className="text-[11px] text-foreground leading-relaxed font-mono">
           {steps[currentStepIndex]?.logSnippet || 'Initializing agent workspace vectors...'}
         </div>
       </div>

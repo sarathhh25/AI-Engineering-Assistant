@@ -28,17 +28,17 @@ export function RepositorySearch({ onSearch }: RepositorySearchProps) {
   return (
     <div className="space-y-2 select-none">
       <div className="relative">
-        <Search className="absolute left-3 top-2.5 size-4 text-zinc-500" />
+        <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
         <input
           type="text"
           placeholder={`Search repository by ${category}...`}
           value={query}
           onChange={handleChange}
-          className="w-full bg-zinc-900/80 border border-white/[0.08] focus:border-blue-500/50 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition-all"
+          className="w-full bg-secondary/60 border border-border focus:border-primary/50 rounded-xl pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none transition-all"
         />
       </div>
 
-      <div className="grid grid-cols-4 gap-1 p-0.5 bg-zinc-900/80 rounded-lg border border-white/5 text-[11px]">
+      <div className="grid grid-cols-4 gap-1 p-0.5 bg-secondary rounded-xl border border-border text-[11px]">
         {categories.map((cat) => {
           const Icon = cat.icon
           const isActive = category === cat.id
@@ -50,8 +50,8 @@ export function RepositorySearch({ onSearch }: RepositorySearchProps) {
                 setCategory(cat.id)
                 if (onSearch) onSearch(query, cat.id)
               }}
-              className={`py-1 rounded-md flex items-center justify-center gap-1 font-medium transition-all ${
-                isActive ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              className={`py-1 rounded-lg flex items-center justify-center gap-1 font-medium transition-all cursor-pointer ${
+                isActive ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               <Icon className="size-3" />

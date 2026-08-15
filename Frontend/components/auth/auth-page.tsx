@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Sparkles,
   Sun,
@@ -15,9 +15,11 @@ import {
   Loader2,
   CheckCircle2,
   ShieldCheck,
-  KeyRound
+  KeyRound,
+  AlertCircle
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { signIn } from 'next-auth/react'
 
 export function AuthPage() {
   const router = useRouter()
@@ -80,19 +82,22 @@ export function AuthPage() {
     handleSsoLogin('SAML / Okta')
   }
 
+  const searchParams = useSearchParams()
+  const authError = searchParams.get('error')
+
   return (
-    <div className="relative min-h-screen w-full flex flex-col justify-between items-center bg-[#09090b] dark:bg-zinc-950 text-foreground overflow-x-hidden selection:bg-blue-600/30 selection:text-blue-200 font-sans">
+    <div className="relative min-h-screen w-full flex flex-col justify-between items-center bg-background text-foreground overflow-x-hidden selection:bg-primary/20 selection:text-primary font-sans">
       {/* Background Decorative Atmosphere & Faint Grid */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Subtle Radial Blue Glow in top-center */}
-        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-gradient-to-b from-blue-600/20 via-indigo-600/10 to-transparent blur-[120px] rounded-full" />
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-blue-900/5 blur-[160px] rounded-full" />
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-gradient-to-b from-primary/20 via-primary/10 to-transparent blur-[120px] rounded-full" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[900px] h-[400px] bg-primary/5 blur-[160px] rounded-full" />
 
         {/* Faint Grid Texture */}
         <div
-          className="absolute inset-0 opacity-[0.03] dark:opacity-[0.04]"
+          className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
           style={{
-            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.4) 1px, transparent 1px)`,
+            backgroundImage: `radial-gradient(currentColor 1px, transparent 1px)`,
             backgroundSize: '24px 24px',
           }}
         />
@@ -102,10 +107,10 @@ export function AuthPage() {
       <header className="relative z-10 w-full px-6 py-4 flex items-center justify-between">
         {/* Minimal Left Brand Icon for small screens */}
         <div className="flex items-center gap-2">
-          <div className="size-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <div className="size-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-md shadow-primary/20">
             <Sparkles className="size-4" />
           </div>
-          <span className="font-semibold text-sm tracking-tight text-white hidden sm:inline">
+          <span className="font-semibold text-sm tracking-tight text-foreground hidden sm:inline">
             AI Engineering Copilot
           </span>
         </div>
@@ -113,12 +118,12 @@ export function AuthPage() {
         {/* Top Right: System Status & Theme Toggle */}
         <div className="flex items-center gap-3">
           {/* System Status Indicator */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/90 border border-zinc-800/80 shadow-sm text-xs backdrop-blur-md">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary border border-border shadow-xs text-xs backdrop-blur-md">
             <span className="relative flex size-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full size-2 bg-emerald-500" />
             </span>
-            <span className="text-zinc-300 text-[11px] font-medium hidden sm:inline">
+            <span className="text-muted-foreground text-[11px] font-medium hidden sm:inline">
               All systems operational
             </span>
           </div>
@@ -127,10 +132,10 @@ export function AuthPage() {
           <button
             onClick={toggleTheme}
             title={`Switch to ${currentTheme === 'dark' ? 'Light' : 'Dark'} Mode`}
-            className="p-2 rounded-xl text-zinc-400 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800/80 shadow-sm transition-colors"
+            className="p-2 rounded-xl text-muted-foreground hover:text-foreground bg-secondary hover:bg-secondary/80 border border-border shadow-xs transition-colors cursor-pointer"
           >
             {mounted && currentTheme === 'light' ? (
-              <Moon className="size-4 text-zinc-700" />
+              <Moon className="size-4 text-foreground" />
             ) : (
               <Sun className="size-4 text-amber-400" />
             )}
@@ -140,26 +145,43 @@ export function AuthPage() {
 
       {/* Main Centered Auth Container */}
       <main className="relative z-10 w-full max-w-md px-4 py-4 flex flex-col items-center justify-center my-auto">
-        <div className="w-full bg-zinc-900/80 dark:bg-[#111114]/90 border border-zinc-800/80 rounded-2xl p-6 sm:p-7 shadow-2xl shadow-black/60 backdrop-blur-xl space-y-5">
+        <div className="w-full bg-card border border-border rounded-2xl p-6 sm:p-7 shadow-xl backdrop-blur-xl space-y-5">
           {/* Brand Header */}
           <div className="flex flex-col items-center text-center space-y-2">
             <div className="size-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 p-0.5 shadow-lg shadow-blue-600/30">
-              <div className="size-full rounded-[14px] bg-zinc-950 flex items-center justify-center text-white">
-                <Sparkles className="size-5 text-blue-400" />
+              <div className="size-full rounded-[14px] bg-card flex items-center justify-center text-primary">
+                <Sparkles className="size-5" />
               </div>
             </div>
 
             <div className="space-y-0.5">
-              <h1 className="text-xl font-bold tracking-tight text-white">
+              <h1 className="text-xl font-bold tracking-tight text-foreground">
                 {isSignUp ? 'Create your workspace' : 'AI Engineering Copilot'}
               </h1>
-              <p className="text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">
+              <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
                 {isSignUp
                   ? 'Get started with autonomous AI code reviews and developer workflows.'
                   : 'Sign in to access your engineering workspace and AI agents.'}
               </p>
             </div>
           </div>
+
+          {/* Auth Error Banner if redirected with ?error= */}
+          {authError && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-300 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+              <AlertCircle className="size-4 shrink-0 text-red-500 mt-0.5" />
+              <div className="space-y-0.5">
+                <div className="font-semibold text-red-700 dark:text-red-200">
+                  Authentication Failed ({authError})
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-normal">
+                  {authError === 'OAuthSignin' || authError === 'OAuthCallback'
+                    ? 'Please verify that GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in Frontend/.env.local and that your Google OAuth redirect URI is set to http://localhost:3000/api/auth/callback/google.'
+                    : 'An authentication error occurred. Please try again or check server credentials.'}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Developer SSO Providers */}
           <div className="space-y-2">
@@ -168,12 +190,12 @@ export function AuthPage() {
               type="button"
               onClick={() => handleSsoLogin('GitHub')}
               disabled={isLoading || !!ssoLoading}
-              className="w-full h-9.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-zinc-100 hover:text-white font-medium text-xs flex items-center justify-center gap-2.5 transition-all shadow-sm active:scale-[0.99] disabled:opacity-60 group"
+              className="w-full h-10 px-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground font-medium text-xs flex items-center justify-center gap-2.5 transition-all shadow-xs active:scale-[0.99] disabled:opacity-60 cursor-pointer group"
             >
               {ssoLoading === 'GitHub' ? (
-                <Loader2 className="size-4 animate-spin text-blue-400" />
+                <Loader2 className="size-4 animate-spin text-primary" />
               ) : (
-                <svg className="size-4 fill-current text-zinc-300 group-hover:text-white" viewBox="0 0 24 24">
+                <svg className="size-4 fill-current text-foreground group-hover:text-primary transition-colors" viewBox="0 0 24 24">
                   <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
                 </svg>
               )}
@@ -183,12 +205,15 @@ export function AuthPage() {
             {/* Google SSO */}
             <button
               type="button"
-              onClick={() => handleSsoLogin('Google')}
+              onClick={() => {
+                setSsoLoading('Google')
+                signIn('google', { callbackUrl: '/dashboard' })
+              }}
               disabled={isLoading || !!ssoLoading}
-              className="w-full h-9.5 px-4 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800/90 text-zinc-200 hover:text-white font-medium text-xs flex items-center justify-center gap-2.5 transition-all shadow-sm active:scale-[0.99] disabled:opacity-60"
+              className="w-full h-10 px-4 rounded-xl bg-secondary/70 hover:bg-secondary border border-border text-foreground font-medium text-xs flex items-center justify-center gap-2.5 transition-all shadow-xs active:scale-[0.99] disabled:opacity-60 cursor-pointer"
             >
               {ssoLoading === 'Google' ? (
-                <Loader2 className="size-4 animate-spin text-blue-400" />
+                <Loader2 className="size-4 animate-spin text-primary" />
               ) : (
                 <svg className="size-4" viewBox="0 0 24 24">
                   <path
@@ -217,17 +242,17 @@ export function AuthPage() {
               type="button"
               onClick={() => setShowEnterpriseModal(true)}
               disabled={isLoading || !!ssoLoading}
-              className="w-full h-9.5 px-4 rounded-xl bg-zinc-900/40 hover:bg-zinc-800/60 border border-zinc-800/60 text-zinc-300 hover:text-white font-medium text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-60"
+              className="w-full h-10 px-4 rounded-xl bg-secondary/40 hover:bg-secondary/70 border border-border text-muted-foreground hover:text-foreground font-medium text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer"
             >
-              <KeyRound className="size-3.5 text-blue-400" />
+              <KeyRound className="size-3.5 text-primary" />
               <span>Enterprise SSO (SAML / Okta)</span>
             </button>
           </div>
 
           {/* Divider */}
           <div className="relative flex items-center justify-center">
-            <div className="w-full border-t border-zinc-800/80" />
-            <span className="absolute bg-[#111114] px-3 text-[11px] text-zinc-500 font-medium tracking-tight">
+            <div className="w-full border-t border-border" />
+            <span className="absolute bg-card px-3 text-[11px] text-muted-foreground font-medium tracking-tight">
               Or continue with work email
             </span>
           </div>
@@ -236,11 +261,11 @@ export function AuthPage() {
           <form onSubmit={handleSubmit} className="space-y-3.5">
             {/* Work Email Input */}
             <div className="space-y-1">
-              <label className="text-xs font-medium text-zinc-300 block">
+              <label className="text-xs font-medium text-foreground block">
                 Work Email
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
                   <Mail className="size-4" />
                 </div>
                 <input
@@ -249,7 +274,7 @@ export function AuthPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@company.com"
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs text-white placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-sans"
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-secondary/60 border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-sans"
                 />
               </div>
             </div>
@@ -257,21 +282,21 @@ export function AuthPage() {
             {/* Password Input */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-zinc-300 block">
+                <label className="text-xs font-medium text-foreground block">
                   Password
                 </label>
                 {!isSignUp && (
                   <button
                     type="button"
                     onClick={() => alert('Password reset link sent to your work email.')}
-                    className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+                    className="text-[11px] text-primary hover:underline transition-colors cursor-pointer"
                   >
                     Forgot password?
                   </button>
                 )}
               </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
                   <Lock className="size-4" />
                 </div>
                 <input
@@ -280,12 +305,12 @@ export function AuthPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-9 pr-10 py-2 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs text-white placeholder-zinc-500 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all font-sans"
+                  className="w-full pl-9 pr-10 py-2 rounded-xl bg-secondary/60 border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-sans"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
@@ -296,11 +321,11 @@ export function AuthPage() {
             <button
               type="submit"
               disabled={isLoading || authSuccess}
-              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-600/25 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
+              className="w-full py-2.5 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-md shadow-primary/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="size-4 animate-spin text-white" />
+                  <Loader2 className="size-4 animate-spin" />
                   <span>Authenticating secure session...</span>
                 </>
               ) : authSuccess ? (
@@ -318,25 +343,25 @@ export function AuthPage() {
           </form>
 
           {/* Footer Text within Card */}
-          <div className="pt-1 text-center text-xs text-zinc-400">
+          <div className="pt-1 text-center text-xs text-muted-foreground">
             {isSignUp ? (
               <span>
                 Already have an engineering workspace?{' '}
                 <button
                   type="button"
                   onClick={() => setIsSignUp(false)}
-                  className="text-blue-400 hover:text-blue-300 font-medium underline underline-offset-4 transition-colors"
+                  className="text-primary hover:underline font-medium underline-offset-4 transition-colors cursor-pointer"
                 >
                   Sign In
                 </button>
               </span>
             ) : (
               <span>
-                Don't have a team workspace?{' '}
+                Don&apos;t have a team workspace?{' '}
                 <button
                   type="button"
                   onClick={() => setIsSignUp(true)}
-                  className="text-blue-400 hover:text-blue-300 font-medium underline underline-offset-4 transition-colors"
+                  className="text-primary hover:underline font-medium underline-offset-4 transition-colors cursor-pointer"
                 >
                   Request Access / Sign Up
                 </button>
@@ -348,41 +373,47 @@ export function AuthPage() {
 
       {/* Enterprise SSO Modal Dialog */}
       {showEnterpriseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 text-xs">
-          <div className="w-full max-w-sm bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div
+          onClick={() => setShowEnterpriseModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 text-xs"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <Building2 className="size-4 text-blue-400" />
-                <h3 className="font-semibold text-sm text-white">Enterprise SSO Login</h3>
+                <Building2 className="size-4 text-primary" />
+                <h3 className="font-semibold text-sm text-foreground">Enterprise SSO Login</h3>
               </div>
               <button
                 onClick={() => setShowEnterpriseModal(false)}
-                className="text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-800"
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-secondary cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-zinc-400 text-xs">
+            <p className="text-muted-foreground text-xs leading-relaxed">
               Enter your corporate domain or IdP identity to route authentication through your enterprise SAML 2.0 / Okta provider.
             </p>
 
             <form onSubmit={handleEnterpriseSubmit} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-zinc-300 text-xs font-medium">Company Domain / IdP</label>
+                <label className="text-foreground text-xs font-medium">Company Domain / IdP</label>
                 <input
                   type="text"
                   required
                   placeholder="acme-corp.okta.com"
                   value={organizationDomain}
                   onChange={(e) => setOrganizationDomain(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white placeholder-zinc-500 text-xs outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 rounded-xl bg-secondary/60 border border-border text-foreground placeholder:text-muted-foreground text-xs outline-none focus:border-primary"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <ShieldCheck className="size-4" />
                 <span>Redirect to Identity Provider</span>
@@ -393,15 +424,15 @@ export function AuthPage() {
       )}
 
       {/* Page Bottom Footer */}
-      <footer className="relative z-10 w-full py-5 text-center text-xs text-zinc-600 px-4">
+      <footer className="relative z-10 w-full py-5 text-center text-xs text-muted-foreground px-4">
         <p className="space-x-1.5 font-sans">
           <span>Protected by enterprise-grade 256-bit encryption</span>
           <span>•</span>
-          <a href="#" className="hover:text-zinc-400 transition-colors">
+          <a href="#" className="hover:text-foreground transition-colors">
             Terms of Service
           </a>
           <span>•</span>
-          <a href="#" className="hover:text-zinc-400 transition-colors">
+          <a href="#" className="hover:text-foreground transition-colors">
             Privacy Policy
           </a>
         </p>

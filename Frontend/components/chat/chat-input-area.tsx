@@ -135,7 +135,7 @@ export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatIn
         />
 
         <form onSubmit={handleSubmit} className="relative">
-          <div className="relative rounded-2xl border border-border/80 bg-card/90 dark:bg-zinc-900/90 shadow-xl p-3 space-y-2.5 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all backdrop-blur-sm">
+          <div className="relative rounded-2xl border border-border bg-card shadow-xl p-3 space-y-2.5 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all backdrop-blur-sm">
             {/* Textarea Input */}
             <textarea
               rows={2}
@@ -147,7 +147,7 @@ export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatIn
             />
 
             {/* Action Toolbar Row */}
-            <div className="flex items-center justify-between pt-2 border-t border-border/60 text-xs">
+            <div className="flex items-center justify-between pt-2 border-t border-border text-xs">
               <div className="flex items-center gap-1.5">
                 {/* @ Mention Trigger */}
                 <button
@@ -156,7 +156,7 @@ export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatIn
                     setText((prev) => prev + '@')
                     setShowMentionMenu(true)
                   }}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center gap-1 text-[11px]"
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
                   title="@ Mention (Issues, PRs, Files)"
                 >
                   <AtSign className="size-3.5 text-primary" />
@@ -175,7 +175,7 @@ export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatIn
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center gap-1 text-[11px]"
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
                   title="Attach Files"
                 >
                   <Paperclip className="size-3.5" />
@@ -186,7 +186,7 @@ export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatIn
                 <button
                   type="button"
                   onClick={() => setRepoContextEnabled((prev) => !prev)}
-                  className={`px-2 py-0.5 rounded-md border text-[10px] font-mono transition-all flex items-center gap-1 ${
+                  className={`px-2 py-0.5 rounded-md border text-[10px] font-mono transition-all flex items-center gap-1 cursor-pointer ${
                     repoContextEnabled
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                       : 'bg-muted text-muted-foreground border-border'
@@ -208,7 +208,7 @@ export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatIn
                 <button
                   type="submit"
                   disabled={(!text.trim() && attachments.length === 0) || disabled}
-                  className="size-8 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground font-semibold shadow-md shadow-primary/20 transition-all flex items-center justify-center active:scale-95"
+                  className="size-8 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-40 text-primary-foreground font-semibold shadow-md shadow-primary/20 transition-all flex items-center justify-center active:scale-95 cursor-pointer"
                   title="Send message"
                 >
                   <ArrowUp className="size-4" />
