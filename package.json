@@ -2,7 +2,7 @@
   "name": "ai-engineering-assistant-workspace",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix Frontend run dev",
+    "dev": "npx -y concurrently \"npm --prefix Frontend run dev\" \"python -m uvicorn Backend.main:app --reload --port 8000\"",
     "dev:frontend": "npm --prefix Frontend run dev",
     "dev:backend": "python -m uvicorn Backend.main:app --reload --port 8000",
     "build": "npm --prefix Frontend run build",

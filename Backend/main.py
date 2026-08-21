@@ -150,20 +150,12 @@ async def chat_endpoint(request: ChatRequest):
             full_prompt += f"\n<attached_files>\n{files_section}\n</attached_files>"
 
         if client:
-            try:
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=full_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        temperature=0.2
-                    )
-                )
-                return {"reply": response.text, "status": "success"}
-            except Exception as gen_err:
+            models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash-latest"]
+            last_err = None
+            for model_name in models_to_try:
                 try:
                     response = client.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model=model_name,
                         contents=full_prompt,
                         config=types.GenerateContentConfig(
                             system_instruction=system_instruction,
@@ -171,8 +163,11 @@ async def chat_endpoint(request: ChatRequest):
                         )
                     )
                     return {"reply": response.text, "status": "success"}
-                except Exception:
-                    raise gen_err
+                except Exception as gen_err:
+                    last_err = gen_err
+                    continue
+            if last_err:
+                raise last_err
         else:
             file_info = f" with {len(attached_files)} attached file(s) ({', '.join(f.fileName for f in attached_files)})" if attached_files else ""
             return {
