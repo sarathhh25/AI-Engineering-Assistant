@@ -10,7 +10,13 @@ import os
 from dotenv import load_dotenv
 
 from sqlalchemy.orm import Session
-from database import init_db, get_db, MessageRecord
+try:
+    from Backend.database import init_db, get_db, MessageRecord
+except ImportError:
+    try:
+        from .database import init_db, get_db, MessageRecord
+    except ImportError:
+        from database import init_db, get_db, MessageRecord
 
 load_dotenv()
 
