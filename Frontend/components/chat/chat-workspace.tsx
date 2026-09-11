@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { ChatMessage, ChatMessageData } from './chat-message'
 import { ChatInputArea } from './chat-input-area'
 import { AttachedFile } from './attachment-manager'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 
 const INITIAL_MESSAGES: ChatMessageData[] = [
@@ -54,13 +54,31 @@ Session tokens expire after 24 hours and refresh keys are persisted in Redis cac
 ]
 
 interface ChatWorkspaceProps {
+  activeChatId?: string | null
   onOpenSettings?: () => void
 }
 
-export function ChatWorkspace({ onOpenSettings }: ChatWorkspaceProps) {
-  const [messages, setMessages] = useState<ChatMessageData[]>(INITIAL_MESSAGES)
+export function ChatWorkspace({ activeChatId, onOpenSettings }: ChatWorkspaceProps) {
+  const [messages, setMessages] = useState<ChatMessageData[]>(() => {
+    if (!activeChatId || activeChatId === 'c1') {
+      return INITIAL_MESSAGES
+    }
+    try {
+      const saved = localStorage.getItem(`copilot_chat_messages_${activeChatId}`)
+      if (saved) return JSON.parse(saved)
+    } catch (e) {}
+    return []
+  })
   const [systemStatus, setSystemStatus] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (activeChatId && activeChatId !== 'c1' && messages.length > 0) {
+      try {
+        localStorage.setItem(`copilot_chat_messages_${activeChatId}`, JSON.stringify(messages))
+      } catch (e) {}
+    }
+  }, [activeChatId, messages])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -218,9 +236,23 @@ Provide temporary staging registry credentials and enable Docker Buildx cache-fr
         className="flex-1 overflow-y-auto divide-y divide-border/30 no-scrollbar pb-6"
       >
         <div className="max-w-3xl mx-auto w-full">
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
-          ))}
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-[55vh] text-center px-4 space-y-3 animate-in fade-in duration-200 select-none">
+              <div className="size-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
+                <Sparkles className="size-6 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold tracking-tight text-foreground">
+                How can AI Engineering Copilot help you today?
+              </h2>
+              <p className="text-xs text-muted-foreground max-w-md leading-relaxed">
+                Ask about code architecture, analyze pull requests, run risk predictions, or inspect repository telemetry.
+              </p>
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <ChatMessage key={msg.id} message={msg} />
+            ))
+          )}
 
           {systemStatus && (
             <div className="py-3 px-6 my-2 mx-4 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-mono flex items-center gap-2 animate-in fade-in duration-150 select-none">

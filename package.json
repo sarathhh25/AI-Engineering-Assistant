@@ -7,6 +7,7 @@
     "dev:backend": "python -m uvicorn Backend.main:app --reload --port 8000",
     "build": "npm --prefix Frontend run build",
     "start": "npm --prefix Frontend run start",
+    "test:e2e": "npm --prefix Frontend run test:e2e",
     "lint": "npm --prefix Frontend run lint"
   }
 }

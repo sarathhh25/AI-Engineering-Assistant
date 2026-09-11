@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import {
   User,
@@ -16,15 +16,59 @@ export function UserMenu() {
   const [open, setOpen] = useState(false)
   const { data: session } = useSession()
 
-  const userName = session?.user?.name || 'Developer'
-  const userEmail = session?.user?.email || 'dev@engineering.ai'
+  const [userProfile, setUserProfile] = useState<{
+    name: string
+    email: string
+    initials: string
+  }>({
+    name: 'Alex Kim',
+    email: 'alex.kim@company.com',
+    initials: 'AK',
+  })
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const name = parsed.name || session?.user?.name || 'Alex Kim'
+        const email = parsed.email || session?.user?.email || 'alex.kim@company.com'
+        const initials = name
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase() || 'AK'
+
+        setUserProfile({ name, email, initials })
+      } else if (session?.user) {
+        const name = session.user.name || 'Alex Kim'
+        const email = session.user.email || 'alex.kim@company.com'
+        const initials = name
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase() || 'AK'
+        setUserProfile({ name, email, initials })
+      }
+    } catch (e) {
+      console.error('Error loading user profile in UserMenu:', e)
+    }
+  }, [session])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user_token')
+    localStorage.removeItem('user_profile')
+    localStorage.removeItem('user')
+    localStorage.clear()
+    sessionStorage.clear()
+    signOut({ redirect: false }).catch(() => {})
+    window.location.href = '/login'
+  }
+
   const userImage = session?.user?.image
-  const initials = userName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase()
 
   return (
     <div className="relative">
@@ -36,12 +80,12 @@ export function UserMenu() {
           {userImage ? (
             <img
               src={userImage}
-              alt={userName}
+              alt={userProfile.name}
               className="size-full rounded-full object-cover"
             />
           ) : (
             <div className="size-full rounded-full bg-zinc-900 flex items-center justify-center font-semibold text-[11px] text-white">
-              {initials}
+              {userProfile.initials}
             </div>
           )}
         </div>
@@ -51,8 +95,8 @@ export function UserMenu() {
         <div className="absolute right-0 mt-1.5 w-56 rounded-xl bg-[#121215] border border-white/10 shadow-2xl p-1 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs select-none space-y-0.5">
           {/* User Info Header */}
           <div className="px-3 py-2 border-b border-white/[0.08] mb-1">
-            <div className="font-semibold text-zinc-100 truncate">{userName}</div>
-            <div className="text-[10px] text-zinc-400 font-mono truncate">{userEmail}</div>
+            <div className="font-semibold text-zinc-100 truncate">{userProfile.name}</div>
+            <div className="text-[10px] text-zinc-400 font-mono truncate">{userProfile.email}</div>
           </div>
 
           {[
@@ -82,7 +126,7 @@ export function UserMenu() {
             <button
               onClick={() => {
                 setOpen(false)
-                signOut({ callbackUrl: '/login' })
+                handleLogout()
               }}
               className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
             >

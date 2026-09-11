@@ -27,9 +27,6 @@ const MENTION_ITEMS: MentionItem[] = [
   { id: 'm5', name: '@components/app-shell.tsx', category: 'file', details: 'React 19 Shell Component' },
   { id: 'm6', name: '@app/page.tsx', category: 'file', details: 'Next.js App Router Page' },
   { id: 'm7', name: '@docs/architecture.md', category: 'doc', details: 'System Design Spec' },
-  { id: 'm8', name: '@JIRA-892 Sprint 14 Backend Engine', category: 'jira', details: 'Jira Task • In Progress' },
-  { id: 'm9', name: '@sarath.dev', category: 'slack_user', details: 'Slack User • AI Engineer' },
-  { id: 'm10', name: '#engineering-alerts', category: 'slack_channel', details: 'Slack Channel • 14 Members' },
 ]
 
 interface MentionMenuProps {

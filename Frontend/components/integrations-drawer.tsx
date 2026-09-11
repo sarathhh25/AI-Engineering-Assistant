@@ -64,7 +64,7 @@ export function IntegrationsDrawer({
                 Integrations
               </p>
               <p className="truncate text-xs text-muted-foreground">
-                4 sources connected
+                {integrations.length} source{integrations.length === 1 ? '' : 's'} connected
               </p>
             </div>
             <span className="flex size-2 items-center justify-center">

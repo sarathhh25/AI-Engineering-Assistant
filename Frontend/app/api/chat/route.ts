@@ -55,11 +55,20 @@ export async function POST(req: NextRequest) {
         const { message, repo = "ai-engineering-assistant", files = [] } = body;
 
         const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const res = await fetch(`${backendUrl}/api/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message, repo, files }),
-        });
+        let res;
+        try {
+            res = await fetch(`${backendUrl}/api/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message, repo, files }),
+            });
+        } catch (fetchError) {
+            const fileSummary = files.length > 0 ? ` (${files.length} attached file(s): ${files.map((f: any) => f.fileName).join(", ")})` : "";
+            return NextResponse.json({
+                reply: `Received message for \`${repo}\`${fileSummary}: "${message}". (Backend fallback mode).`,
+                status: "fallback"
+            });
+        }
 
         if (res.ok) {
             const data = await res.json();

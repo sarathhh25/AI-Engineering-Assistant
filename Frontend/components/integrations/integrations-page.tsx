@@ -1,19 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { signIn, useSession } from 'next-auth/react'
 import {
   GitPullRequest,
-  Kanban,
-  MessageSquare,
-  GitBranch,
-  Layers,
-  FileText,
-  HardDrive,
-  Palette as FigmaIcon,
-  MessageCircle,
-  Plug,
-  FolderGit2,
-  Share2
+  Plug
 } from 'lucide-react'
 
 import { IntegrationSearch } from './integration-search'
@@ -29,76 +20,15 @@ const INITIAL_TOOLS: IntegrationTool[] = [
     name: 'GitHub',
     description: 'Sync repositories, pull requests, issues, commits, and code reviews.',
     icon: GitPullRequest,
-    status: 'Connected',
+    status: 'Disconnected',
     scopes: ['Repository access', 'Pull requests', 'Issues', 'Commits', 'Branches'],
-  },
-  {
-    id: 'gitlab',
-    name: 'GitLab',
-    description: 'Connect self-hosted or cloud GitLab repositories and CI/CD pipelines.',
-    icon: GitBranch,
-    status: 'Disconnected',
-    scopes: ['Repositories', 'Merge Requests', 'CI/CD Pipelines'],
-  },
-  {
-    id: 'bitbucket',
-    name: 'Bitbucket',
-    description: 'Integrate Bitbucket repositories and automated pull request reviews.',
-    icon: FolderGit2,
-    status: 'Disconnected',
-    scopes: ['Repositories', 'Pull Requests', 'Pipelines'],
-  },
-  {
-    id: 'jira',
-    name: 'Jira',
-    description: 'Track sprint progress, issue status, and developer assignments.',
-    icon: Kanban,
-    status: 'Connected',
-    scopes: ['Projects', 'Issues', 'Sprints', 'Assignments'],
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Send AI agent notifications and execute slash commands in team channels.',
-    icon: MessageSquare,
-    status: 'Connected',
-    scopes: ['Channels', 'Messages', 'Mentions', 'Notifications'],
-  },
-  {
-    id: 'discord',
-    name: 'Discord',
-    description: 'Receive build alerts and join developer community sync channels.',
-    icon: MessageCircle,
-    status: 'Disconnected',
-    scopes: ['Developer Community', 'Channel Alerts', 'Bot Triggers'],
-  },
-  {
-    id: 'gdrive',
-    name: 'Google Drive',
-    description: 'Extract technical specs, PDF architecture docs, and spreadsheets.',
-    icon: HardDrive,
-    status: 'Disconnected',
-    scopes: ['Technical Docs', 'Architecture Diagrams', 'PDF Specs'],
-  },
-  {
-    id: 'notion',
-    name: 'Notion',
-    description: 'Index documentation, RFCs, and engineering meeting notes.',
-    icon: FileText,
-    status: 'Disconnected',
-    scopes: ['Specs', 'Knowledge Base', 'Meeting Notes'],
-  },
-  {
-    id: 'linear',
-    name: 'Linear',
-    description: 'Streamline project issues, cycles, and architecture specs.',
-    icon: Layers,
-    status: 'Disconnected',
-    scopes: ['Issues', 'Cycles', 'Projects', 'Roadmap'],
   },
 ]
 
 export function IntegrationsPage() {
+  const { data: session } = useSession()
+  const isGithubConnected = !!(session as any)?.accessToken
+
   const [tools, setTools] = useState<IntegrationTool[]>(INITIAL_TOOLS)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<IntegrationFilterType>('all')
@@ -131,6 +61,10 @@ export function IntegrationsPage() {
   }
 
   const handleConnectClick = (tool: IntegrationTool) => {
+    if (tool.id === 'github') {
+      signIn('github')
+      return
+    }
     setSelectedModalTool(tool)
     setModalOpen(true)
   }
@@ -142,10 +76,19 @@ export function IntegrationsPage() {
     setTools(updated)
 
     setTimeout(() => {
-      const finalTools = tools.map((t) =>
-        t.id === toolId ? { ...t, status: 'Connected' as ConnectionState } : t
-      )
-      saveToolStates(finalTools)
+      setTools((prev) => {
+        const finalTools = prev.map((t) =>
+          t.id === toolId ? { ...t, status: 'Connected' as ConnectionState } : t
+        )
+        try {
+          const map: Record<string, ConnectionState> = {}
+          finalTools.forEach((t) => {
+            map[t.id] = t.status
+          })
+          localStorage.setItem('copilot_integrations_v2', JSON.stringify(map))
+        } catch (e) {}
+        return finalTools
+      })
     }, 600)
   }
 
@@ -163,12 +106,16 @@ export function IntegrationsPage() {
 
     if (!matchesSearch) return false
 
-    if (filter === 'connected') return tool.status === 'Connected'
-    if (filter === 'available') return tool.status === 'Disconnected'
+    const isConnected = tool.id === 'github' ? isGithubConnected : tool.status === 'Connected'
+
+    if (filter === 'connected') return isConnected
+    if (filter === 'available') return !isConnected
     return true
   })
 
-  const connectedCount = tools.filter((t) => t.status === 'Connected').length
+  const connectedCount = tools.filter((t) =>
+    t.id === 'github' ? isGithubConnected : t.status === 'Connected'
+  ).length
 
   return (
     <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 space-y-6 select-none antialiased">
@@ -213,6 +160,7 @@ export function IntegrationsPage() {
           <IntegrationCard
             key={tool.id}
             tool={tool}
+            isGithubConnected={isGithubConnected}
             onConnectClick={handleConnectClick}
             onDisconnectClick={handleDisconnect}
             onOpenSettings={(t) => setSettingsTool(t)}

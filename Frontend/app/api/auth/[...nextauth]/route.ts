@@ -1,5 +1,6 @@
 import NextAuth, { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
+import GitHubProvider from 'next-auth/providers/github'
 
 const clientId = process.env.GOOGLE_CLIENT_ID || ''
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET || ''
@@ -16,6 +17,15 @@ export const authOptions: NextAuthOptions = {
       clientId,
       clientSecret,
     }),
+    GitHubProvider({
+      clientId: process.env.GITHUB_ID || '',
+      clientSecret: process.env.GITHUB_SECRET || '',
+      authorization: {
+        params: {
+          scope: 'read:user repo',
+        },
+      },
+    }),
   ],
   secret:
     process.env.NEXTAUTH_SECRET ||
@@ -31,11 +41,18 @@ export const authOptions: NextAuthOptions = {
       if (session?.user && token?.sub) {
         (session.user as any).id = token.sub
       }
+      if (token?.accessToken) {
+        // @ts-ignore
+        session.accessToken = token.accessToken
+      }
       return session
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id
+      }
+      if (account?.access_token) {
+        token.accessToken = account.access_token
       }
       return token
     },

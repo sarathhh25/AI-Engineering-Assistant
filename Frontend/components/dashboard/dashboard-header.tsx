@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { RefreshCw, Calendar, CheckCircle2 } from 'lucide-react'
 
 interface DashboardHeaderProps {
@@ -9,6 +9,22 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ onRefresh }: DashboardHeaderProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [userName, setUserName] = useState('Alex Kim')
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed.name || parsed.fullName) {
+          setUserName(parsed.name || parsed.fullName)
+        }
+      }
+    } catch (e) {
+      console.error('Error reading user profile in DashboardHeader:', e)
+    }
+  }, [])
+
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -26,7 +42,7 @@ export function DashboardHeader({ onRefresh }: DashboardHeaderProps) {
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border select-none">
       <div className="space-y-1">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          Good evening, Sarath <span className="animate-bounce inline-block">👋</span>
+          Good evening, {userName} <span className="animate-bounce inline-block">👋</span>
         </h1>
         <p className="text-xs text-muted-foreground">
           Here&apos;s what&apos;s happening across your engineering workspace.

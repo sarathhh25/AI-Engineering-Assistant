@@ -21,7 +21,7 @@ export function WorkspaceMain({
   onOpenSettings,
   activeChatId,
 }: WorkspaceMainProps) {
-  const [internalActiveTab, setInternalActiveTab] = useState<string>('chat')
+  const [internalActiveTab, setInternalActiveTab] = useState<string>('dashboard')
   const currentTab = externalActiveTab || internalActiveTab
 
   return (
@@ -47,7 +47,11 @@ export function WorkspaceMain({
         ) : currentTab === 'personalization' ? (
           <SettingsPage initialSection="personalization" />
         ) : (
-          <ChatWorkspace onOpenSettings={onOpenSettings} />
+          <ChatWorkspace
+            key={activeChatId || 'default'}
+            activeChatId={activeChatId}
+            onOpenSettings={onOpenSettings}
+          />
         )}
       </div>
     </main>

@@ -33,6 +33,47 @@ export function TopNav({
   const notifRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
 
+  const [userProfile, setUserProfile] = useState<{
+    name: string
+    email: string
+    initials: string
+  }>({
+    name: 'Alex Kim',
+    email: 'alex.kim@company.com',
+    initials: 'AK',
+  })
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const name = parsed.name || parsed.fullName || 'Alex Kim'
+        const email = parsed.email || 'alex.kim@company.com'
+        const initials = name
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase() || 'AK'
+
+        setUserProfile({ name, email, initials })
+      }
+    } catch (e) {
+      console.error('Error reading user profile in TopNav:', e)
+    }
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user_token')
+    localStorage.removeItem('user_profile')
+    localStorage.removeItem('user')
+    localStorage.clear()
+    sessionStorage.clear()
+    window.location.href = '/login'
+  }
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -159,17 +200,17 @@ export function TopNav({
               className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-xl hover:bg-secondary/80 transition-colors border border-border/60 cursor-pointer"
             >
               <div className="size-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-[10px] text-white">
-                SK
+                {userProfile.initials}
               </div>
-              <span className="font-medium text-foreground hidden sm:inline text-xs">Sarath</span>
+              <span className="font-medium text-foreground hidden sm:inline text-xs">{userProfile.name}</span>
               <ChevronDown className="size-3 text-muted-foreground" />
             </button>
 
             {profileOpen && (
               <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-popover p-1.5 shadow-2xl text-xs z-50 animate-in fade-in duration-100 space-y-1 backdrop-blur-xl">
                 <div className="p-2 border-b border-border space-y-0.5">
-                  <div className="font-semibold text-foreground">Sarath</div>
-                  <div className="text-[10px] text-emerald-500 font-mono">AI Engineer</div>
+                  <div className="font-semibold text-foreground">{userProfile.name}</div>
+                  <div className="text-[10px] text-muted-foreground font-mono truncate">{userProfile.email}</div>
                 </div>
 
                 <button
@@ -186,7 +227,7 @@ export function TopNav({
                 <button
                   onClick={() => {
                     setProfileOpen(false)
-                    window.location.href = '/login'
+                    handleLogout()
                   }}
                   className="w-full text-left px-3 py-2 rounded-xl hover:bg-destructive/10 text-destructive flex items-center gap-2 transition-colors cursor-pointer"
                 >

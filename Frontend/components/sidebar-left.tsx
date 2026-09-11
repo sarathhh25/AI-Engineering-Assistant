@@ -45,14 +45,7 @@ interface SidebarProps {
   onSearchClick?: () => void
 }
 
-const DEFAULT_CHATS: ChatItem[] = [
-  { id: 'c1', title: 'Refactor Auth Middleware to FastAPI', timestamp: '10m ago', group: 'Today', isPinned: true },
-  { id: 'c2', title: 'Design 2-Column Minimalist Chat Layout', timestamp: '2h ago', group: 'Today', isPinned: true },
-  { id: 'c3', title: 'Optimize Qdrant RAG Vector Search', timestamp: '1d ago', group: 'Yesterday' },
-  { id: 'c4', title: 'Setup Tailwind CSS v4 & Theme Tokens', timestamp: '1d ago', group: 'Yesterday' },
-  { id: 'c5', title: 'Docker Multi-stage Build Pipeline', timestamp: '4d ago', group: 'This Week' },
-  { id: 'c6', title: 'OpenAI Function Calling Schemas', timestamp: '5d ago', group: 'This Week' },
-]
+const DEFAULT_CHATS: ChatItem[] = []
 
 export function SidebarLeft({
   activeNav: externalActiveNav,
@@ -65,12 +58,53 @@ export function SidebarLeft({
   aiCredits = 8450,
   onSearchClick,
 }: SidebarProps) {
-  const [activeNav, setActiveNav] = useState(externalActiveNav || 'chat')
+  const [activeNav, setActiveNav] = useState(externalActiveNav || 'dashboard')
   const [internalChats, setInternalChats] = useState<ChatItem[]>(DEFAULT_CHATS)
   const chats = externalChats || internalChats
   const setChats = externalSetChats || setInternalChats
   const [profilePopoverOpen, setProfilePopoverOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
+
+  const [userProfile, setUserProfile] = useState<{
+    name: string
+    email: string
+    initials: string
+  }>({
+    name: 'Alex Kim',
+    email: 'alex.kim@company.com',
+    initials: 'AK',
+  })
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const name = parsed.name || parsed.fullName || 'Alex Kim'
+        const email = parsed.email || 'alex.kim@company.com'
+        const initials = name
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase() || 'AK'
+
+        setUserProfile({ name, email, initials })
+      }
+    } catch (e) {
+      console.error('Error reading user profile from localStorage:', e)
+    }
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user_token')
+    localStorage.removeItem('user_profile')
+    localStorage.removeItem('user')
+    localStorage.clear()
+    sessionStorage.clear()
+    window.location.href = '/login'
+  }
 
   // Handle click outside profile popover
   useEffect(() => {
@@ -362,8 +396,8 @@ export function SidebarLeft({
         {profilePopoverOpen && (
           <div className="absolute bottom-full left-2 right-2 mb-2 bg-popover border border-border rounded-2xl shadow-2xl p-1.5 z-50 text-xs font-sans animate-in fade-in duration-100 space-y-1 backdrop-blur-xl">
             <div className="p-2 border-b border-border space-y-0.5">
-              <div className="font-semibold text-foreground">Sarath</div>
-              <div className="text-[10px] text-emerald-500 font-mono">AI Engineer</div>
+              <div className="font-semibold text-foreground">{userProfile.name}</div>
+              <div className="text-[10px] text-muted-foreground font-mono truncate">{userProfile.email}</div>
               <div className="text-[10px] text-amber-500 font-mono pt-1 flex items-center gap-1">
                 <Coins className="size-3 text-amber-500" /> {aiCredits.toLocaleString()} AI Credits
               </div>
@@ -394,7 +428,7 @@ export function SidebarLeft({
             <button
               onClick={() => {
                 setProfilePopoverOpen(false)
-                window.location.href = '/login'
+                handleLogout()
               }}
               className="w-full text-left px-3 py-2 rounded-xl hover:bg-destructive/10 text-destructive flex items-center gap-2 transition-colors cursor-pointer"
             >
@@ -413,15 +447,15 @@ export function SidebarLeft({
             <div className="relative shrink-0">
               <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 p-0.5 shadow-xs">
                 <div className="size-full rounded-full bg-zinc-950 flex items-center justify-center font-bold text-[10px] text-white">
-                  SK
+                  {userProfile.initials}
                 </div>
               </div>
               <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" />
             </div>
 
             <div className="flex flex-col text-left min-w-0 truncate">
-              <span className="font-semibold text-xs text-sidebar-foreground truncate">Sarath</span>
-              <span className="text-[10px] text-muted-foreground truncate">AI Engineer</span>
+              <span className="font-semibold text-xs text-sidebar-foreground truncate">{userProfile.name}</span>
+              <span className="text-[10px] text-muted-foreground truncate">{userProfile.email}</span>
             </div>
           </div>
 

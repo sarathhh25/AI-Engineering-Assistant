@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, Settings, Check, RefreshCw, Database, GitBranch } from 'lucide-react'
+import { signIn, signOut, useSession } from 'next-auth/react'
+import { X, Settings, Check, RefreshCw, Database, GitBranch, User, LogOut } from 'lucide-react'
 
 interface IntegrationSettingsModalProps {
   isOpen: boolean
@@ -14,6 +15,10 @@ export function IntegrationSettingsModal({
   onClose,
   toolName,
 }: IntegrationSettingsModalProps) {
+  const { data: session } = useSession()
+  const accountName = session?.user?.name || session?.user?.email || 'Sarath (sarathhh25)'
+  const accountEmail = session?.user?.email || 'sarath@sunka.ai'
+
   const [selectedRepo, setSelectedRepo] = useState('ai-engineering-assistant')
   const [selectedBranch, setSelectedBranch] = useState('main')
   const [syncInterval, setSyncInterval] = useState('Real-time Webhook')
@@ -30,6 +35,11 @@ export function IntegrationSettingsModal({
       setToastMsg(null)
       onClose()
     }, 800)
+  }
+
+  const handleChangeAccount = async () => {
+    await signOut({ redirect: false })
+    signIn('github', { prompt: 'select_account' })
   }
 
   return (
@@ -49,7 +59,7 @@ export function IntegrationSettingsModal({
             </div>
             <div>
               <h3 className="font-semibold text-sm text-foreground font-sans">{toolName} Configuration</h3>
-              <p className="text-[10px] text-muted-foreground">Integration Settings & Webhook Preferences</p>
+              <p className="text-[10px] text-muted-foreground">Integration Settings & Account Preferences</p>
             </div>
           </div>
 
@@ -67,7 +77,48 @@ export function IntegrationSettingsModal({
           </div>
         )}
 
-        {/* 1. Repository Selection */}
+        {/* 1. Account Section: Connected GitHub Account & Change Account */}
+        <div className="space-y-1.5 p-3 rounded-xl bg-secondary/60 border border-border">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <User className="size-3 text-primary" /> Active GitHub Account
+            </span>
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold">
+              Connected
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {session?.user?.image ? (
+                <img
+                  src={session.user.image}
+                  alt={accountName}
+                  className="size-7 rounded-full border border-border shrink-0"
+                />
+              ) : (
+                <div className="size-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-xs shrink-0">
+                  {accountName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-semibold text-xs text-foreground truncate font-sans">{accountName}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{accountEmail}</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleChangeAccount}
+              className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary font-semibold text-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <RefreshCw className="size-3.5" />
+              <span>Change Account</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 2. Repository Selection */}
         <div className="space-y-1.5">
           <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
             <GitBranch className="size-3 text-primary" /> Target Repository

@@ -1,22 +1,15 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { TopNav } from '@/components/top-nav'
 import { SidebarLeft, ChatItem } from '@/components/sidebar-left'
 import { WorkspaceMain } from '@/components/workspace-main'
 import { CommandPalette } from '@/components/command-palette'
 
-const DEFAULT_CHATS: ChatItem[] = [
-  { id: 'c1', title: 'Refactor Auth Middleware to FastAPI', timestamp: '10m ago', group: 'Today', isPinned: true },
-  { id: 'c2', title: 'Design 2-Column Minimalist Chat Layout', timestamp: '2h ago', group: 'Today', isPinned: true },
-  { id: 'c3', title: 'Optimize Qdrant RAG Vector Search', timestamp: '1d ago', group: 'Yesterday' },
-  { id: 'c4', title: 'Setup Tailwind CSS v4 & Theme Tokens', timestamp: '1d ago', group: 'Yesterday' },
-  { id: 'c5', title: 'Docker Multi-stage Build Pipeline', timestamp: '4d ago', group: 'This Week' },
-  { id: 'c6', title: 'OpenAI Function Calling Schemas', timestamp: '5d ago', group: 'This Week' },
-]
+const DEFAULT_CHATS: ChatItem[] = []
 
 export function AppShell() {
-  const [activeTab, setActiveTab] = useState<'chat' | 'integrations' | 'settings' | 'personalization' | string>('chat')
+  const [activeTab, setActiveTab] = useState<'chat' | 'integrations' | 'settings' | 'personalization' | string>('dashboard')
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
   // Master Global Workspace State
@@ -24,7 +17,7 @@ export function AppShell() {
   const [activeProject, setActiveProject] = useState('AI Engineering Assistant')
   const [activeAgent, setActiveAgent] = useState('Autonomous Agent')
   const [aiCredits, setAiCredits] = useState(8450)
-  const [activeChatId, setActiveChatId] = useState<string | null>('c1')
+  const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [chats, setChats] = useState<ChatItem[]>(DEFAULT_CHATS)
 
   // Modal dialog states
@@ -34,12 +27,32 @@ export function AppShell() {
   useEffect(() => {
     try {
       const savedChats = localStorage.getItem('copilot_chats')
+      let parsedChats: ChatItem[] = []
       if (savedChats) {
-        setChats(JSON.parse(savedChats))
+        parsedChats = JSON.parse(savedChats)
+        setChats(parsedChats)
       }
       const savedCredits = localStorage.getItem('copilot_credits')
       if (savedCredits) {
         setAiCredits(Number(savedCredits))
+      }
+
+      // If no chats exist yet (first-time launch), create a default new chat
+      if (!savedChats || parsedChats.length === 0) {
+        const initialChat: ChatItem = {
+          id: `chat-${Date.now()}`,
+          title: 'New Engineering Chat',
+          timestamp: 'Just now',
+          group: 'Today',
+          isPinned: false,
+        }
+        const updated = [initialChat]
+        setChats(updated)
+        localStorage.setItem('copilot_chats', JSON.stringify(updated))
+        setActiveChatId(initialChat.id)
+      } else if (parsedChats.length > 0) {
+        // Default to the first chat in the list if one exists
+        setActiveChatId(parsedChats[0].id)
       }
     } catch (e) {
       console.error('Failed to load local storage state:', e)
@@ -55,7 +68,7 @@ export function AppShell() {
     }
   }
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     const newChatObj: ChatItem = {
       id: `chat-${Date.now()}`,
       title: 'New Engineering Chat',
@@ -63,11 +76,18 @@ export function AppShell() {
       group: 'Today',
       isPinned: false,
     }
-    const updated = [newChatObj, ...chats]
-    updateChatsAndSave(updated)
+    setChats((prev) => {
+      const updated = [newChatObj, ...prev]
+      try {
+        localStorage.setItem('copilot_chats', JSON.stringify(updated))
+      } catch (e) {
+        console.error('Failed to save chats:', e)
+      }
+      return updated
+    })
     setActiveChatId(newChatObj.id)
     setActiveTab('chat')
-  }
+  }, [])
 
   // Global Keyboard Shortcuts (⌘K, ⌘N, Escape)
   useEffect(() => {
@@ -88,7 +108,7 @@ export function AppShell() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [commandPaletteOpen, dialogType])
+  }, [commandPaletteOpen, dialogType, handleNewChat])
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground font-sans select-none antialiased">

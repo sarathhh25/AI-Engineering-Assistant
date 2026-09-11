@@ -48,29 +48,59 @@ export function AuthPage() {
 
   const currentTheme = mounted ? resolvedTheme || theme : 'dark'
 
+  const handleLogin = (userEmail: string, userName?: string) => {
+    const derivedName = userName || (userEmail ? userEmail.split('@')[0] : 'User')
+    const formattedName = derivedName
+      .split(/[\._]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+
+    const userProfile = {
+      name: formattedName,
+      email: userEmail || 'user@company.com',
+      token: `token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    }
+
+    // Strictly overwrite any existing keys in localStorage
+    localStorage.removeItem('token')
+    localStorage.removeItem('user_token')
+    localStorage.removeItem('user_profile')
+    localStorage.removeItem('user')
+
+    localStorage.setItem('token', userProfile.token)
+    localStorage.setItem('user_token', userProfile.token)
+    localStorage.setItem('user_profile', JSON.stringify(userProfile))
+    localStorage.setItem('user', JSON.stringify(userProfile))
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
 
     setIsLoading(true)
+    handleLogin(email)
 
     // Simulate authentication pipeline
     setTimeout(() => {
       setIsLoading(false)
       setAuthSuccess(true)
       setTimeout(() => {
-        router.push('/dashboard')
+        window.location.href = '/dashboard'
       }, 700)
     }, 1200)
   }
 
   const handleSsoLogin = (provider: string) => {
     setSsoLoading(provider)
+    const ssoEmail = `${provider.toLowerCase().replace(/\s+/g, '')}.user@company.com`
+    const ssoName = `${provider} User`
+    handleLogin(ssoEmail, ssoName)
+
     setTimeout(() => {
       setSsoLoading(null)
       setAuthSuccess(true)
       setTimeout(() => {
-        router.push('/dashboard')
+        window.location.href = '/dashboard'
       }, 600)
     }, 1000)
   }
