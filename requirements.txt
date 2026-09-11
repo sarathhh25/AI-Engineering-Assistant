@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-pydantic
-google-genai
-duckduckgo-search
-PyGithub
-python-dotenv

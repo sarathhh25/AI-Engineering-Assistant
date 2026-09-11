@@ -1,0 +1,42 @@
+# ============================================================
+# Development Docker Compose (with Hot-Reload & Live Volume Mounts)
+# Usage: docker compose -f docker-compose.dev.yml up
+# ============================================================
+services:
+  backend:
+    container_name: ai-copilot-backend-dev
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./Backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    networks:
+      - dev-network
+
+  frontend:
+    container_name: ai-copilot-frontend-dev
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./Frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "corepack enable pnpm && pnpm install && pnpm dev"
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - dev-network
+
+networks:
+  dev-network:
+    driver: bridge
