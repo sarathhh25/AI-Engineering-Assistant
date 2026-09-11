@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
+  output: 'standalone',
+  turbopack: {
+    root: '.',
   },
   images: {
     unoptimized: true,
@@ -23,4 +24,5 @@ const nextConfig = {
 }
 
 export default nextConfig
+
 

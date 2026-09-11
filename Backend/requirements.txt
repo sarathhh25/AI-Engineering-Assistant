@@ -5,3 +5,5 @@ google-genai
 duckduckgo-search
 PyGithub
 python-dotenv
+sqlalchemy
+psycopg2-binary
