@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Sparkles
 } from 'lucide-react'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 export interface CopilotSettings {
   language: string
@@ -79,18 +80,29 @@ interface SettingsPageProps {
 
 export function SettingsPage({ initialSection = 'general' }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>(initialSection)
-  const [settings, setSettings] = useState<CopilotSettings>(DEFAULT_SETTINGS)
+  const userProfile = useUserProfile()
+  const [settings, setSettings] = useState<CopilotSettings>(() => ({
+    ...DEFAULT_SETTINGS,
+    profileName: 'Developer',
+    avatarInitials: 'D',
+  }))
   const [toastMsg, setToastMsg] = useState<string | null>(null)
 
-  // Load settings from localStorage
+  // Load settings from localStorage or sync with user profile
   useEffect(() => {
     try {
       const saved = localStorage.getItem('copilot_settings_v1')
       if (saved) {
         setSettings(JSON.parse(saved))
+      } else if (userProfile.name) {
+        setSettings((prev) => ({
+          ...prev,
+          profileName: userProfile.name,
+          avatarInitials: userProfile.initials,
+        }))
       }
     } catch {}
-  }, [])
+  }, [userProfile])
 
   const saveSettings = (newSettings: CopilotSettings) => {
     setSettings(newSettings)

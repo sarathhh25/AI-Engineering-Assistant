@@ -3,6 +3,7 @@
 import React from 'react'
 import { Sparkles, User, FileCode, CheckCircle2 } from 'lucide-react'
 import { CodeBlock } from './code-block'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 export interface ChatMessageData {
   id: string
@@ -58,6 +59,7 @@ function formatInlineMarkdown(text: string) {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user'
+  const user = useUserProfile()
 
   return (
     <div
@@ -70,9 +72,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
       {/* Avatar */}
       <div className="shrink-0">
         {isUser ? (
-          <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-            SK
-          </div>
+          user.image ? (
+            <img
+              src={user.image}
+              alt={user.name}
+              className="size-8 rounded-full object-cover shadow-sm ring-1 ring-border"
+            />
+          ) : (
+            <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+              {user.initials}
+            </div>
+          )
         ) : (
           <div className="size-8 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
             <Sparkles className="size-4" />
@@ -86,7 +96,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-foreground text-xs">
-              {isUser ? 'Sarath' : 'AI Engineering Copilot'}
+              {isUser ? user.name : 'AI Engineering Copilot'}
             </span>
             {!isUser && (
               <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20">

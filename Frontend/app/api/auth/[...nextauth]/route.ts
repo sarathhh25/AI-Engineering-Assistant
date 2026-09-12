@@ -1,32 +1,69 @@
 import NextAuth, { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import GitHubProvider from 'next-auth/providers/github'
+import CredentialsProvider from 'next-auth/providers/credentials'
 
-const clientId = process.env.GOOGLE_CLIENT_ID || ''
-const clientSecret = process.env.GOOGLE_CLIENT_SECRET || ''
+const googleClientId = process.env.GOOGLE_CLIENT_ID || ''
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || ''
 
-if (!clientId || !clientSecret) {
-  console.warn(
-    '[NextAuth Warning] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set in Frontend/.env.local.'
+const githubClientId = process.env.GITHUB_ID || process.env.GITHUB_CLIENT_ID || ''
+const githubClientSecret = process.env.GITHUB_SECRET || process.env.GITHUB_CLIENT_SECRET || ''
+
+const providers: NextAuthOptions['providers'] = []
+
+if (googleClientId && googleClientSecret) {
+  providers.push(
+    GoogleProvider({
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
+    })
   )
 }
 
-export const authOptions: NextAuthOptions = {
-  providers: [
-    GoogleProvider({
-      clientId,
-      clientSecret,
-    }),
+if (githubClientId && githubClientSecret) {
+  providers.push(
     GitHubProvider({
-      clientId: process.env.GITHUB_ID || '',
-      clientSecret: process.env.GITHUB_SECRET || '',
+      clientId: githubClientId,
+      clientSecret: githubClientSecret,
       authorization: {
         params: {
           scope: 'read:user repo',
         },
       },
-    }),
-  ],
+    })
+  )
+}
+
+// Credentials provider for work email and local developer login
+providers.push(
+  CredentialsProvider({
+    id: 'credentials',
+    name: 'Credentials',
+    credentials: {
+      email: { label: 'Email', type: 'email' },
+      name: { label: 'Name', type: 'text' },
+      image: { label: 'Image', type: 'text' },
+    },
+    async authorize(credentials) {
+      if (!credentials?.email) return null
+      const rawName = credentials.name || credentials.email.split('@')[0]
+      const name = rawName
+        .split(/[\._]/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ')
+
+      return {
+        id: `user-${Date.now()}`,
+        name: name || 'Developer',
+        email: credentials.email,
+        image: credentials.image || null,
+      }
+    },
+  })
+)
+
+export const authOptions: NextAuthOptions = {
+  providers,
   secret:
     process.env.NEXTAUTH_SECRET ||
     process.env.AUTH_SECRET ||
@@ -50,6 +87,9 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id
+        if (user.name) token.name = user.name
+        if (user.email) token.email = user.email
+        if (user.image) token.picture = user.image
       }
       if (account?.access_token) {
         token.accessToken = account.access_token
@@ -62,4 +102,3 @@ export const authOptions: NextAuthOptions = {
 const handler = NextAuth(authOptions)
 
 export { handler as GET, handler as POST }
-

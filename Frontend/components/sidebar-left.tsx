@@ -22,6 +22,8 @@ import {
   Trash2,
   MoreVertical,
 } from 'lucide-react'
+import { signOut } from 'next-auth/react'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 export interface ChatItem {
   id: string
@@ -64,37 +66,7 @@ export function SidebarLeft({
   const setChats = externalSetChats || setInternalChats
   const [profilePopoverOpen, setProfilePopoverOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
-
-  const [userProfile, setUserProfile] = useState<{
-    name: string
-    email: string
-    initials: string
-  }>({
-    name: 'Alex Kim',
-    email: 'alex.kim@company.com',
-    initials: 'AK',
-  })
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        const name = parsed.name || parsed.fullName || 'Alex Kim'
-        const email = parsed.email || 'alex.kim@company.com'
-        const initials = name
-          .split(' ')
-          .map((n: string) => n[0])
-          .join('')
-          .substring(0, 2)
-          .toUpperCase() || 'AK'
-
-        setUserProfile({ name, email, initials })
-      }
-    } catch (e) {
-      console.error('Error reading user profile from localStorage:', e)
-    }
-  }, [])
+  const userProfile = useUserProfile()
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -103,6 +75,7 @@ export function SidebarLeft({
     localStorage.removeItem('user')
     localStorage.clear()
     sessionStorage.clear()
+    signOut({ redirect: false }).catch(() => {})
     window.location.href = '/login'
   }
 
@@ -445,10 +418,18 @@ export function SidebarLeft({
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative shrink-0">
-              <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 p-0.5 shadow-xs">
-                <div className="size-full rounded-full bg-zinc-950 flex items-center justify-center font-bold text-[10px] text-white">
-                  {userProfile.initials}
-                </div>
+              <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 p-0.5 shadow-xs overflow-hidden">
+                {userProfile.image ? (
+                  <img
+                    src={userProfile.image}
+                    alt={userProfile.name}
+                    className="size-full rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="size-full rounded-full bg-zinc-950 flex items-center justify-center font-bold text-[10px] text-white">
+                    {userProfile.initials}
+                  </div>
+                )}
               </div>
               <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" />
             </div>
