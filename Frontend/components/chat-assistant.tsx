@@ -7,39 +7,10 @@ import { IntegrationsDrawer } from '@/components/integrations-drawer'
 import { MessageList, type ChatMessage } from '@/components/message-list'
 import { SuggestionPills } from '@/components/suggestion-pills'
 import { TopBar as Header } from '@/components/top-bar'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 export function ChatAssistant() {
-  // User profile state loaded from localStorage
-  const [userProfile, setUserProfile] = useState<{
-    name: string
-    email: string
-    initials: string
-  }>({
-    name: 'Alex Kim',
-    email: 'alex.kim@company.com',
-    initials: 'AK',
-  })
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        const name = parsed.name || parsed.fullName || 'Alex Kim'
-        const email = parsed.email || 'alex.kim@company.com'
-        const initials = name
-          .split(' ')
-          .map((n: string) => n[0])
-          .join('')
-          .substring(0, 2)
-          .toUpperCase() || 'AK'
-
-        setUserProfile({ name, email, initials })
-      }
-    } catch (e) {
-      console.error('Error reading user profile in ChatAssistant:', e)
-    }
-  }, [])
+  const userProfile = useUserProfile()
 
   // 1. Initialize state from localStorage (or default to true)
   const [drawerOpen, setDrawerOpen] = useState(true)

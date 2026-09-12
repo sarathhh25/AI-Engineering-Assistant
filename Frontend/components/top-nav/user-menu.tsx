@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import React, { useState } from 'react'
+import { signOut } from 'next-auth/react'
 import {
   User,
   CreditCard,
@@ -11,51 +11,11 @@ import {
   Keyboard,
   LogOut
 } from 'lucide-react'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 export function UserMenu() {
   const [open, setOpen] = useState(false)
-  const { data: session } = useSession()
-
-  const [userProfile, setUserProfile] = useState<{
-    name: string
-    email: string
-    initials: string
-  }>({
-    name: 'Alex Kim',
-    email: 'alex.kim@company.com',
-    initials: 'AK',
-  })
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        const name = parsed.name || session?.user?.name || 'Alex Kim'
-        const email = parsed.email || session?.user?.email || 'alex.kim@company.com'
-        const initials = name
-          .split(' ')
-          .map((n: string) => n[0])
-          .join('')
-          .substring(0, 2)
-          .toUpperCase() || 'AK'
-
-        setUserProfile({ name, email, initials })
-      } else if (session?.user) {
-        const name = session.user.name || 'Alex Kim'
-        const email = session.user.email || 'alex.kim@company.com'
-        const initials = name
-          .split(' ')
-          .map((n: string) => n[0])
-          .join('')
-          .substring(0, 2)
-          .toUpperCase() || 'AK'
-        setUserProfile({ name, email, initials })
-      }
-    } catch (e) {
-      console.error('Error loading user profile in UserMenu:', e)
-    }
-  }, [session])
+  const userProfile = useUserProfile()
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -68,7 +28,7 @@ export function UserMenu() {
     window.location.href = '/login'
   }
 
-  const userImage = session?.user?.image
+  const userImage = userProfile.image
 
   return (
     <div className="relative">

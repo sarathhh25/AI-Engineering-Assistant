@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState } from 'react'
-import { signIn, signOut, useSession } from 'next-auth/react'
+import { signIn, signOut } from 'next-auth/react'
 import { X, Settings, Check, RefreshCw, Database, GitBranch, User, LogOut } from 'lucide-react'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 interface IntegrationSettingsModalProps {
   isOpen: boolean
@@ -15,9 +16,9 @@ export function IntegrationSettingsModal({
   onClose,
   toolName,
 }: IntegrationSettingsModalProps) {
-  const { data: session } = useSession()
-  const accountName = session?.user?.name || session?.user?.email || 'Sarath (sarathhh25)'
-  const accountEmail = session?.user?.email || 'sarath@sunka.ai'
+  const userProfile = useUserProfile()
+  const accountName = userProfile.name || userProfile.email || 'Developer'
+  const accountEmail = userProfile.email || 'developer@company.com'
 
   const [selectedRepo, setSelectedRepo] = useState('ai-engineering-assistant')
   const [selectedBranch, setSelectedBranch] = useState('main')
@@ -90,9 +91,9 @@ export function IntegrationSettingsModal({
 
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2.5 min-w-0">
-              {session?.user?.image ? (
+              {userProfile.image ? (
                 <img
-                  src={session.user.image}
+                  src={userProfile.image}
                   alt={accountName}
                   className="size-7 rounded-full border border-border shrink-0"
                 />

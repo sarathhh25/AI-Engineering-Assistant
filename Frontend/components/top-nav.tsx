@@ -16,6 +16,8 @@ import {
   Layers
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { signOut } from 'next-auth/react'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 export interface TopNavProps {
   onOpenSettings?: () => void
@@ -32,37 +34,7 @@ export function TopNav({
   const [profileOpen, setProfileOpen] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
-
-  const [userProfile, setUserProfile] = useState<{
-    name: string
-    email: string
-    initials: string
-  }>({
-    name: 'Alex Kim',
-    email: 'alex.kim@company.com',
-    initials: 'AK',
-  })
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        const name = parsed.name || parsed.fullName || 'Alex Kim'
-        const email = parsed.email || 'alex.kim@company.com'
-        const initials = name
-          .split(' ')
-          .map((n: string) => n[0])
-          .join('')
-          .substring(0, 2)
-          .toUpperCase() || 'AK'
-
-        setUserProfile({ name, email, initials })
-      }
-    } catch (e) {
-      console.error('Error reading user profile in TopNav:', e)
-    }
-  }, [])
+  const userProfile = useUserProfile()
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -71,6 +43,7 @@ export function TopNav({
     localStorage.removeItem('user')
     localStorage.clear()
     sessionStorage.clear()
+    signOut({ redirect: false }).catch(() => {})
     window.location.href = '/login'
   }
 
@@ -199,8 +172,16 @@ export function TopNav({
               }}
               className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-xl hover:bg-secondary/80 transition-colors border border-border/60 cursor-pointer"
             >
-              <div className="size-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-[10px] text-white">
-                {userProfile.initials}
+              <div className="size-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-[10px] text-white overflow-hidden">
+                {userProfile.image ? (
+                  <img
+                    src={userProfile.image}
+                    alt={userProfile.name}
+                    className="size-full rounded-full object-cover"
+                  />
+                ) : (
+                  userProfile.initials
+                )}
               </div>
               <span className="font-medium text-foreground hidden sm:inline text-xs">{userProfile.name}</span>
               <ChevronDown className="size-3 text-muted-foreground" />

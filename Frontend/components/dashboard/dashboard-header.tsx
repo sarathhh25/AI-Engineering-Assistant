@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { RefreshCw, Calendar, CheckCircle2 } from 'lucide-react'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 interface DashboardHeaderProps {
   onRefresh?: () => void
@@ -9,21 +10,8 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ onRefresh }: DashboardHeaderProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [userName, setUserName] = useState('Alex Kim')
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('user_profile') || localStorage.getItem('user')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (parsed.name || parsed.fullName) {
-          setUserName(parsed.name || parsed.fullName)
-        }
-      }
-    } catch (e) {
-      console.error('Error reading user profile in DashboardHeader:', e)
-    }
-  }, [])
+  const userProfile = useUserProfile()
+  const userName = userProfile.name
 
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
