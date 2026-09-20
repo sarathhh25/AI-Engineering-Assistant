@@ -34,40 +34,50 @@ if (githubClientId && githubClientSecret) {
   )
 }
 
-// Credentials provider for work email and local developer login
+// Credentials provider backed by FastAPI backend with bcrypt password verification
 providers.push(
   CredentialsProvider({
     id: 'credentials',
     name: 'Credentials',
     credentials: {
       email: { label: 'Email', type: 'email' },
-      name: { label: 'Name', type: 'text' },
-      image: { label: 'Image', type: 'text' },
+      password: { label: 'Password', type: 'password' },
     },
     async authorize(credentials) {
-      if (!credentials?.email) return null
-      const rawName = credentials.name || credentials.email.split('@')[0]
-      const name = rawName
-        .split(/[\._]/)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ')
+      if (!credentials?.email || !credentials?.password) return null
 
-      return {
-        id: `user-${Date.now()}`,
-        name: name || 'Developer',
-        email: credentials.email,
-        image: credentials.image || null,
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+      try {
+        const res = await fetch(`${backendUrl}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: credentials.email, password: credentials.password }),
+        })
+        if (!res.ok) return null // wrong password / unknown user -> reject
+
+        const data = await res.json()
+        return {
+          id: String(data.user.id),
+          name: data.user.full_name,
+          email: data.user.email,
+          // carry the backend session token through the JWT so API calls can use it
+          backendToken: data.token,
+        } as any
+      } catch {
+        return null
       }
     },
   })
 )
 
+const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET
+if (!secret) {
+  throw new Error('NEXTAUTH_SECRET (or AUTH_SECRET) must be set - no insecure default is allowed.')
+}
+
 export const authOptions: NextAuthOptions = {
   providers,
-  secret:
-    process.env.NEXTAUTH_SECRET ||
-    process.env.AUTH_SECRET ||
-    'ai-engineering-assistant-development-secret-key-32-chars-long',
+  secret,
   debug: process.env.NODE_ENV === 'development',
   pages: {
     signIn: '/login',
@@ -82,6 +92,9 @@ export const authOptions: NextAuthOptions = {
         // @ts-ignore
         session.accessToken = token.accessToken
       }
+      if (token?.backendToken) {
+        (session as any).backendToken = token.backendToken
+      }
       return session
     },
     async jwt({ token, user, account }) {
@@ -90,6 +103,9 @@ export const authOptions: NextAuthOptions = {
         if (user.name) token.name = user.name
         if (user.email) token.email = user.email
         if (user.image) token.picture = user.image
+        if ((user as any).backendToken) {
+          token.backendToken = (user as any).backendToken
+        }
       }
       if (account?.access_token) {
         token.accessToken = account.access_token

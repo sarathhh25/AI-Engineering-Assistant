@@ -6,29 +6,31 @@
 
 ## 🌟 Key Features
 
-* **🤖 Autonomous AI Code Assistant**: Powered by **Google Gemini AI** with live context-aware chat, code explanation, debugging, refactoring, and automated PR reviews.
-* **🌐 Web & Repository Search**: Live web research via **DuckDuckGo Search** and GitHub repository inspection via **PyGithub**.
-* **💻 Modern Developer Workspace**: Built with **Next.js 16**, **React 19**, **Tailwind CSS**, dynamic dark/light theme switching, code viewers, and interactive terminal interfaces.
-* **🔐 Authentication & SSO**: Configured with **NextAuth.js** supporting Google OAuth, GitHub SSO, Enterprise SAML/Okta, and local workspace sign-in.
-* **💾 Persistent History**: SQLAlchemy database backend with SQLite / PostgreSQL support for chat session history and message records.
-* **📖 Interactive API Documentation**: Built-in FastAPI Swagger UI (`/docs`) and Next.js OpenAPI explorer (`/api-doc`).
-* **🐳 Containerization Ready**: Complete Docker and Docker Compose configurations for instant dev and production deployment.
+- **🤖 Autonomous AI Code Assistant**: Powered by **Google Gemini AI** with live context-aware chat, code explanation, debugging, refactoring, and automated PR reviews.
+- **🌐 Web & Repository Search**: Live web research via **DuckDuckGo Search** and GitHub repository inspection via **PyGithub**.
+- **💻 Modern Developer Workspace**: Built with **Next.js 16**, **React 19**, **Tailwind CSS**, dynamic dark/light theme switching, code viewers, and interactive terminal interfaces.
+- **🔐 Authentication & SSO**: Configured with **NextAuth.js** supporting Google OAuth, GitHub SSO, Enterprise SAML/Okta, and local workspace sign-in.
+- **💾 Persistent History**: SQLAlchemy database backend with SQLite / PostgreSQL support for chat session history and message records.
+- **📖 Interactive API Documentation**: Built-in FastAPI Swagger UI (`/docs`) and Next.js OpenAPI explorer (`/api-doc`).
+- **🐳 Containerization Ready**: Complete Docker and Docker Compose configurations for instant dev and production deployment.
 
 ---
 
 ## 🛠️ Tech Stack
 
 ### Frontend
-* **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack)
-* **UI & Styling**: [React 19](https://react.dev/), [Tailwind CSS](https://tailwindcss.com/), [Lucide React](https://lucide.dev/)
-* **Auth**: [NextAuth.js v4](https://next-auth.js.org/)
-* **API Docs**: Swagger UI React & next-swagger-doc
+
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack)
+- **UI & Styling**: [React 19](https://react.dev/), [Tailwind CSS](https://tailwindcss.com/), [Lucide React](https://lucide.dev/)
+- **Auth**: [NextAuth.js v4](https://next-auth.js.org/)
+- **API Docs**: Swagger UI React & next-swagger-doc
 
 ### Backend
-* **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+)
-* **AI Engine**: [Google GenAI SDK](https://github.com/google/generative-ai-python) (`gemini-2.5-flash`)
-* **Database & ORM**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/) (SQLite / PostgreSQL)
-* **Integrations**: [PyGithub](https://github.com/PyGithub/PyGithub), DuckDuckGo Search API, Uvicorn
+
+- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+)
+- **AI Engine**: [Google GenAI SDK](https://github.com/google/generative-ai-python) (`gemini-2.5-flash`)
+- **Database & ORM**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/) (SQLite / PostgreSQL)
+- **Integrations**: [PyGithub](https://github.com/PyGithub/PyGithub), DuckDuckGo Search API, Uvicorn
 
 ---
 
@@ -49,14 +51,16 @@ graph TD
 ## 🚀 Getting Started
 
 ### Prerequisites
-* **Node.js**: `v18+` or `v20+`
-* **Python**: `3.10+`
-* **Package Managers**: `npm` / `pnpm` and `pip`
-* *(Optional)* **Docker** & **Docker Compose**
+
+- **Node.js**: `v18+` or `v20+`
+- **Python**: `3.10+`
+- **Package Managers**: `npm` / `pnpm` and `pip`
+- _(Optional)_ **Docker** & **Docker Compose**
 
 ---
 
 ### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/sarathhh25/AI-Engineering-Assistant.git
 cd AI-Engineering-Assistant
@@ -87,12 +91,13 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # NextAuth / OAuth Configuration
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=ai-engineering-assistant-development-secret-key-32-chars-long
+# Generate a secure secret using: openssl rand -base64 32
+NEXTAUTH_SECRET=your_generated_secret_key_here
 GOOGLE_CLIENT_ID=your_google_client_id_here.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your_google_client_secret_here
 
-# Database URL (Optional: defaults to sqlite:///./copilot_db.db)
-DATABASE_URL=sqlite:///./copilot_db.db
+# Database URL (Required)
+DATABASE_URL=postgresql://postgres:<password>@localhost:5432/ai_copilot_db
 ```
 
 ---
@@ -100,11 +105,13 @@ DATABASE_URL=sqlite:///./copilot_db.db
 ### 3. Install Dependencies
 
 #### Backend
+
 ```bash
 pip install -r requirements.txt
 ```
 
 #### Frontend
+
 ```bash
 cd Frontend
 npm install
@@ -116,27 +123,31 @@ cd ..
 ### 4. Running Locally
 
 #### Run Both Frontend & Backend Concurrently (Recommended)
+
 From the project root:
+
 ```bash
 npm run dev
 ```
 
 #### Or Run Independently:
-* **Backend**:
+
+- **Backend**:
   ```bash
   python -m uvicorn Backend.main:app --reload --port 8000
   ```
-* **Frontend**:
+- **Frontend**:
   ```bash
   cd Frontend
   npm run dev
   ```
 
 Access the applications:
-* **Frontend UI**: [http://localhost:3000](http://localhost:3000)
-* **Backend API Root**: [http://localhost:8000](http://localhost:8000)
-* **Backend Interactive Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-* **Frontend API Docs**: [http://localhost:3000/api-doc](http://localhost:3000/api-doc)
+
+- **Frontend UI**: [http://localhost:3000](http://localhost:3000)
+- **Backend API Root**: [http://localhost:8000](http://localhost:8000)
+- **Backend Interactive Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Frontend API Docs**: [http://localhost:3000/api-doc](http://localhost:3000/api-doc)
 
 ---
 
@@ -196,14 +207,14 @@ AI-Engineering-Assistant/
 
 ## 🧪 Available Scripts
 
-| Command | Description |
-| :--- | :--- |
-| `npm run dev` | Start both Next.js frontend and FastAPI backend concurrently |
-| `npm run dev:frontend` | Start Next.js frontend in development mode (`:3000`) |
-| `npm run dev:backend` | Start FastAPI backend with hot-reloading (`:8000`) |
-| `npm run build` | Build the Next.js production bundle |
-| `npm run test:e2e` | Run Playwright end-to-end test suite |
-| `npm run lint` | Run Next.js ESLint checks |
+| Command                | Description                                                  |
+| :--------------------- | :----------------------------------------------------------- |
+| `npm run dev`          | Start both Next.js frontend and FastAPI backend concurrently |
+| `npm run dev:frontend` | Start Next.js frontend in development mode (`:3000`)         |
+| `npm run dev:backend`  | Start FastAPI backend with hot-reloading (`:8000`)           |
+| `npm run build`        | Build the Next.js production bundle                          |
+| `npm run test:e2e`     | Run Playwright end-to-end test suite                         |
+| `npm run lint`         | Run Next.js ESLint checks                                    |
 
 ---
 

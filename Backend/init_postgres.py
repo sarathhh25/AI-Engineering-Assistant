@@ -29,10 +29,17 @@ from sqlalchemy.exc import ProgrammingError
 # Step 1 – Create the database itself (connect to 'postgres' maintenance DB)
 # ---------------------------------------------------------------------------
 DB_NAME = "ai_copilot_db"
-PG_BASE_URL = os.getenv(
-    "PG_BASE_URL",
-    "postgresql://postgres:Yashwanth12%40@localhost:5432",
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+PG_BASE_URL = os.getenv("PG_BASE_URL")
+
+if not PG_BASE_URL and DATABASE_URL:
+    PG_BASE_URL = DATABASE_URL.rsplit('/', 1)[0]
+
+if not PG_BASE_URL:
+    raise RuntimeError(
+        "Neither PG_BASE_URL nor DATABASE_URL is set in environment or .env. "
+        "No default credentials are provided for security reasons."
+    )
 
 print(f"🔧 Connecting to PostgreSQL at {PG_BASE_URL} ...")
 

@@ -11,6 +11,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL must be set}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - PORT=8000

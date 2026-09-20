@@ -48,76 +48,73 @@ export function AuthPage() {
 
   const currentTheme = mounted ? resolvedTheme || theme : 'dark'
 
-  const handleLogin = async (userEmail: string, userName?: string) => {
-    const derivedName = userName || (userEmail ? userEmail.split('@')[0] : 'User')
-    const formattedName = derivedName
-      .split(/[\._]/)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
+  const [formError, setFormError] = useState<string | null>(null)
 
-    const userProfile = {
-      name: formattedName,
-      email: userEmail || 'user@company.com',
-      token: `token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+
+  async function backendAuth(endpoint: 'login' | 'register', payload: Record<string, string>) {
+    const res = await fetch(`${API_BASE_URL}/api/auth/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      let errorMsg = 'Authentication failed'
+      if (body.detail) {
+        if (typeof body.detail === 'string') {
+          errorMsg = body.detail
+        } else if (Array.isArray(body.detail) && body.detail[0]?.msg) {
+          errorMsg = body.detail[0].msg
+        }
+      }
+      throw new Error(errorMsg)
     }
-
-    // Strictly overwrite any existing keys in localStorage
-    localStorage.removeItem('token')
-    localStorage.removeItem('user_token')
-    localStorage.removeItem('user_profile')
-    localStorage.removeItem('user')
-
-    localStorage.setItem('token', userProfile.token)
-    localStorage.setItem('user_token', userProfile.token)
-    localStorage.setItem('user_profile', JSON.stringify(userProfile))
-    localStorage.setItem('user', JSON.stringify(userProfile))
-
-    // Sync with NextAuth Credentials Provider
-    try {
-      await signIn('credentials', {
-        email: userProfile.email,
-        name: userProfile.name,
-        redirect: false,
-      })
-    } catch {}
+    return res.json() as Promise<{ token: string; user: { id: number; full_name: string; email: string } }>
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) return
+    if (!email || !password) return
 
     setIsLoading(true)
-    await handleLogin(email)
+    setFormError(null)
+    try {
+      const data = isSignUp
+        ? await backendAuth('register', { full_name: email.split('@')[0], email, password })
+        : await backendAuth('login', { email, password })
 
-    setTimeout(() => {
+      // Only the server-issued token is trusted.
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user_token', data.token)
+      localStorage.setItem('user_profile', JSON.stringify(data.user))
+      localStorage.setItem('user', JSON.stringify(data.user))
+
+      // Also sync with NextAuth Credentials Provider
+      try {
+        await signIn('credentials', {
+          email,
+          password,
+          redirect: false,
+        })
+      } catch {}
+
       setIsLoading(false)
       setAuthSuccess(true)
       setTimeout(() => {
         window.location.href = '/dashboard'
-      }, 700)
-    }, 1000)
-  }
-
-  const handleSsoLogin = async (provider: string) => {
-    setSsoLoading(provider)
-    const ssoEmail = `${provider.toLowerCase().replace(/\s+/g, '')}.user@company.com`
-    const ssoName = `${provider} Developer`
-    await handleLogin(ssoEmail, ssoName)
-
-    setTimeout(() => {
-      setSsoLoading(null)
-      setAuthSuccess(true)
-      setTimeout(() => {
-        window.location.href = '/dashboard'
-      }, 600)
-    }, 800)
+      }, 500)
+    } catch (err: any) {
+      setIsLoading(false)
+      setFormError(err.message || 'Invalid email or password')
+    }
   }
 
   const handleEnterpriseSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!organizationDomain) return
     setShowEnterpriseModal(false)
-    handleSsoLogin('SAML / Okta')
+    setFormError('Enterprise SSO (SAML / Okta) is not configured for domain: ' + organizationDomain)
   }
 
   const searchParams = useSearchParams()
@@ -221,12 +218,40 @@ export function AuthPage() {
             </div>
           )}
 
+          {/* Form Error Banner */}
+          {formError && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-300 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+              <AlertCircle className="size-4 shrink-0 text-red-500 mt-0.5" />
+              <div className="font-medium text-xs leading-normal">
+                {formError}
+              </div>
+            </div>
+          )}
+
           {/* Developer SSO Providers */}
           <div className="space-y-2">
             {/* GitHub SSO */}
             <button
               type="button"
-              onClick={() => handleSsoLogin('GitHub')}
+              onClick={async () => {
+                setSsoLoading('GitHub')
+                setFormError(null)
+                try {
+                  const result = await signIn('github', {
+                    callbackUrl: '/dashboard',
+                    redirect: false,
+                  })
+                  if (result?.error) {
+                    setFormError('GitHub sign in failed: ' + result.error)
+                  } else if (result?.url) {
+                    window.location.href = result.url
+                  }
+                } catch {
+                  setFormError('Failed to initialize GitHub sign in.')
+                } finally {
+                  setSsoLoading(null)
+                }
+              }}
               disabled={isLoading || !!ssoLoading}
               className="w-full h-10 px-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground font-medium text-xs flex items-center justify-center gap-2.5 transition-all shadow-xs active:scale-[0.99] disabled:opacity-60 cursor-pointer group"
             >
@@ -245,19 +270,21 @@ export function AuthPage() {
               type="button"
               onClick={async () => {
                 setSsoLoading('Google')
+                setFormError(null)
                 try {
                   const result = await signIn('google', {
                     callbackUrl: '/dashboard',
                     redirect: false,
                   })
                   if (result?.error) {
-                    // Fallback to seamless developer login if Google OAuth keys are not configured
-                    await handleSsoLogin('Google')
+                    setFormError('Google sign in failed: ' + result.error)
                   } else if (result?.url) {
                     window.location.href = result.url
                   }
                 } catch {
-                  await handleSsoLogin('Google')
+                  setFormError('Failed to initialize Google sign in.')
+                } finally {
+                  setSsoLoading(null)
                 }
               }}
               disabled={isLoading || !!ssoLoading}
