@@ -3,11 +3,11 @@ import GoogleProvider from 'next-auth/providers/google'
 import GitHubProvider from 'next-auth/providers/github'
 import CredentialsProvider from 'next-auth/providers/credentials'
 
-const googleClientId = process.env.GOOGLE_CLIENT_ID || ''
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || ''
+const googleClientId = (process.env.GOOGLE_CLIENT_ID || '').trim()
+const googleClientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim()
 
-const githubClientId = process.env.GITHUB_ID || process.env.GITHUB_CLIENT_ID || ''
-const githubClientSecret = process.env.GITHUB_SECRET || process.env.GITHUB_CLIENT_SECRET || ''
+const githubClientId = (process.env.GITHUB_ID || process.env.GITHUB_CLIENT_ID || '').trim()
+const githubClientSecret = (process.env.GITHUB_SECRET || process.env.GITHUB_CLIENT_SECRET || '').trim()
 
 const providers: NextAuthOptions['providers'] = []
 
