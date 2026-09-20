@@ -1,11 +1,18 @@
 import os
 import datetime
+from dotenv import load_dotenv
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, DateTime,
     Boolean, ForeignKey, JSON, UniqueConstraint
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 import bcrypt
+
+# Ensure environment variables are loaded
+base_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(base_dir)
+load_dotenv(dotenv_path=os.path.join(root_dir, ".env"))
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Password hashing utility (bcrypt - direct)
@@ -23,10 +30,12 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 # Database engine & session
 # ---------------------------------------------------------------------------
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:Yashwanth12%40@localhost:5432/ai_copilot_db",
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. Configure it via environment variable / .env - "
+        "no default credentials are provided for security reasons."
+    )
 
 # SQLite compat (kept for flexibility, though we now target PostgreSQL)
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

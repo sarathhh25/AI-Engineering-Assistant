@@ -389,6 +389,41 @@ def get_github_context(query: str, repo_name: str) -> str:
     except Exception:
         return f"ACTIVE REPOSITORY: {repo_name}\nBranch: main (Local Workspace)\n{local_files_str}"
 
+_GREETING_PATTERNS = {
+    "hi", "hii", "hiii", "hey", "heyy", "hello", "helo", "yo", "sup",
+    "good morning", "good afternoon", "good evening", "morning", "evening",
+    "how are you", "how r u", "whats up", "what's up", "greetings",
+    "thanks", "thank you", "thx", "ok", "okay", "k", "bye", "goodbye",
+}
+
+
+def is_smalltalk(text: str) -> bool:
+    """
+    Detects greetings / filler messages that don't need repo telemetry or a
+    live web search. Prevents queries like 'hii' or 'hello' from being routed
+    through the search pipeline and coming back with unrelated trivia.
+    """
+    normalized = "".join(ch for ch in text.strip().lower() if ch.isalnum() or ch == " ")
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return True
+    if normalized in _GREETING_PATTERNS:
+        return True
+    # Very short, single-word inputs with no question mark are almost always small talk
+    # rather than an engineering question (e.g. "hii", "yo", "sup").
+    if len(normalized) <= 5 and "?" not in text and " " not in normalized:
+        return True
+    return False
+
+
+def generate_smalltalk_response(user_question: str) -> str:
+    return (
+        "Hey! 👋 I'm your AI Engineering Copilot — ask me about your repository's "
+        "architecture, pull requests, risk predictions, or attach a file for review, "
+        "and I'll dig in. What would you like to look at?"
+    )
+
+
 def generate_offline_response(user_question: str, current_repo: str, attached_files: list, live_data: str, github_data: str) -> tuple[str, list]:
     """
     Intelligently answers queries when GEMINI_API_KEY is not configured or in offline fallback mode.
@@ -396,6 +431,10 @@ def generate_offline_response(user_question: str, current_repo: str, attached_fi
     """
     q_lower = user_question.lower()
     referenced_files = []
+
+    # Case 0: Greetings / small talk — never route these through the search pipeline.
+    if is_smalltalk(user_question):
+        return generate_smalltalk_response(user_question), []
 
     # Case 1: User attached files
     if attached_files:
@@ -522,11 +561,16 @@ async def chat_endpoint(
             print(f"DB Error saving user message: {db_err}")
             db.rollback()
 
-        # Run context gathering concurrently
-        live_data, github_data = await asyncio.gather(
-            asyncio.to_thread(get_realtime_context, user_question),
-            asyncio.to_thread(get_github_context, user_question, current_repo)
-        )
+        # Run context gathering concurrently — but skip it entirely for greetings
+        # and other small talk, since a web/GitHub search for "hii" or "hello"
+        # only returns irrelevant noise (and wastes a round trip on every message).
+        if is_smalltalk(user_question):
+            live_data, github_data = "No recent web data found.", f"ACTIVE REPOSITORY: {current_repo}"
+        else:
+            live_data, github_data = await asyncio.gather(
+                asyncio.to_thread(get_realtime_context, user_question),
+                asyncio.to_thread(get_github_context, user_question, current_repo)
+            )
 
         # Build attached files content string
         files_section = ""
