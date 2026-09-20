@@ -87,7 +87,7 @@ class ApiClient {
     message: string,
     repo: string = 'ai-engineering-assistant',
     files: Array<{ fileName: string; content: string }> = []
-  ): Promise<{ reply: string; status?: string }> {
+  ): Promise<{ reply: string; status?: string; references?: string[] }> {
     try {
       return await this.request('/api/chat', {
         method: 'POST',
@@ -99,6 +99,7 @@ class ApiClient {
       return {
         reply: `Received message for \`${repo}\`${filesSummary}: "${message}". (Backend fallback mode). All repository files indexed & verified clean.`,
         status: 'fallback',
+        references: [],
       }
     }
   }

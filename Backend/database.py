@@ -21,7 +21,7 @@ class MessageRecord(Base):
     repo_name = Column(String)
     role = Column(String)  # 'user' or 'assistant'
     content = Column(Text)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
 # Automatically create the tables when the app starts
 def init_db():

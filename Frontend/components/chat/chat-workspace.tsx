@@ -212,7 +212,7 @@ Provide temporary staging registry credentials and enable Docker Buildx cache-fr
         role: 'assistant',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         content: response.reply,
-        references: ['@Backend/main.py', '@components/app-shell.tsx'],
+        references: response.references && response.references.length > 0 ? response.references : undefined,
       }
 
       setMessages((prev) => [...prev, aiReply])
