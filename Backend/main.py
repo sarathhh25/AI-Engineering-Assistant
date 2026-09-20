@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
+import secrets
 from google import genai
 from google.genai import types
 from duckduckgo_search import DDGS
@@ -10,7 +11,7 @@ import os
 import sys
 import json
 import urllib.request
-import urllib.parse
+import urllib.parse 
 import asyncio
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
@@ -25,12 +26,24 @@ load_dotenv(dotenv_path=os.path.join(base_dir, ".env"))
 load_dotenv()
 
 try:
-    from Backend.database import init_db, get_db, MessageRecord
+    from Backend.database import (
+        init_db, get_db,
+        User, UserSession, ChatSession, Message, UserSetting, Repository,
+        hash_password, verify_password,
+    )
 except ImportError:
     try:
-        from .database import init_db, get_db, MessageRecord
+        from .database import (
+            init_db, get_db,
+            User, UserSession, ChatSession, Message, UserSetting, Repository,
+            hash_password, verify_password,
+        )
     except ImportError:
-        from database import init_db, get_db, MessageRecord
+        from database import (
+            init_db, get_db,
+            User, UserSession, ChatSession, Message, UserSetting, Repository,
+            hash_password, verify_password,
+        )
 
 app = FastAPI(title="AI Engineering Copilot Backend API")
 
@@ -95,6 +108,16 @@ class ConfigRequest(BaseModel):
     gemini_api_key: Optional[str] = None
     github_token: Optional[str] = None
 
+# --- Auth Request Models ---
+class RegisterRequest(BaseModel):
+    full_name: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
 # 0. GET / (Root Service Discovery)
 @app.get("/")
 async def root_endpoint():
@@ -131,6 +154,111 @@ async def set_config(req: ConfigRequest):
         "status": "success",
         "gemini_active": client is not None,
         "github_configured": bool(os.getenv("GITHUB_TOKEN"))
+    }
+
+
+# --- Helper: resolve user from Authorization header ---
+def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> Optional["User"]:
+    """Resolve authenticated user from 'Bearer <token>' header. Returns None for anonymous."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.split(" ", 1)[1]
+    session = db.query(UserSession).filter(UserSession.session_token == token).first()
+    if not session:
+        return None
+    return db.query(User).filter(User.id == session.user_id).first()
+
+
+# --------------------------------------------------------------------------
+#  AUTH ENDPOINTS
+# --------------------------------------------------------------------------
+
+# POST /api/auth/register
+@app.post("/api/auth/register")
+async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == req.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    new_user = User(
+        full_name=req.full_name,
+        email=req.email,
+        password_hash=hash_password(req.password),
+        auth_provider="local",
+    )
+    db.add(new_user)
+    db.flush()
+
+    # Create default settings
+    db.add(UserSetting(user_id=new_user.id, preferred_model="gemini-2.5-flash", theme="dark"))
+
+    # Issue session token
+    token = secrets.token_urlsafe(32)
+    db.add(UserSession(
+        user_id=new_user.id,
+        session_token=token,
+        expires_at=None,
+    ))
+    db.commit()
+
+    return {
+        "status": "success",
+        "user": {"id": new_user.id, "full_name": new_user.full_name, "email": new_user.email},
+        "token": token,
+    }
+
+
+# POST /api/auth/login
+@app.post("/api/auth/login")
+async def login_user(req: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user or not user.password_hash:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not verify_password(req.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = secrets.token_urlsafe(32)
+    db.add(UserSession(
+        user_id=user.id,
+        session_token=token,
+        expires_at=None,
+    ))
+    db.commit()
+
+    return {
+        "status": "success",
+        "user": {"id": user.id, "full_name": user.full_name, "email": user.email},
+        "token": token,
+    }
+
+
+# GET /api/auth/me
+@app.get("/api/auth/me")
+async def get_me(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    user = get_current_user(authorization, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    settings = db.query(UserSetting).filter(UserSetting.user_id == user.id).first()
+    repos = db.query(Repository).filter(Repository.user_id == user.id).all()
+    chat_count = db.query(ChatSession).filter(ChatSession.user_id == user.id).count()
+
+    return {
+        "status": "success",
+        "user": {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "auth_provider": user.auth_provider,
+            "is_active": user.is_active,
+            "created_at": str(user.created_at),
+        },
+        "settings": {
+            "preferred_model": settings.preferred_model if settings else "gemini-2.5-flash",
+            "theme": settings.theme if settings else "dark",
+        },
+        "repositories": [{"repo_name": r.repo_name, "language": r.language, "is_favorite": r.is_favorite} for r in repos],
+        "total_chats": chat_count,
     }
 
 
@@ -347,22 +475,49 @@ def generate_offline_response(user_question: str, current_repo: str, attached_fi
 
 # 3. POST /api/chat
 @app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat_endpoint(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+):
     try:
         user_question = request.message
         current_repo = request.repo or "ai-engineering-assistant"
         attached_files = request.files or []
 
+        # Resolve user (anonymous fallback)
+        current_user = get_current_user(authorization, db)
+        user_id = current_user.id if current_user else None
+
+        # Get or create chat session
+        chat_session = None
+        if user_id:
+            chat_session = (
+                db.query(ChatSession)
+                .filter(ChatSession.user_id == user_id, ChatSession.repo_name == current_repo, ChatSession.is_active == True)
+                .first()
+            )
+            if not chat_session:
+                chat_session = ChatSession(
+                    user_id=user_id,
+                    title=user_question[:80],
+                    repo_name=current_repo,
+                    is_active=True,
+                )
+                db.add(chat_session)
+                db.flush()
+
         # Save User Message to Database
         try:
-            user_db_msg = MessageRecord(
-                session_id="chat-session-1",
-                repo_name=current_repo,
-                role="user",
-                content=user_question
-            )
-            db.add(user_db_msg)
-            db.commit()
+            if chat_session and user_id:
+                user_db_msg = Message(
+                    chat_session_id=chat_session.id,
+                    user_id=user_id,
+                    role="user",
+                    content=user_question,
+                )
+                db.add(user_db_msg)
+                db.commit()
         except Exception as db_err:
             print(f"DB Error saving user message: {db_err}")
             db.rollback()
@@ -443,14 +598,15 @@ async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
 
         # Save AI Response to Database
         try:
-            ai_db_msg = MessageRecord(
-                session_id="chat-session-1",
-                repo_name=current_repo,
-                role="assistant",
-                content=reply_text
-            )
-            db.add(ai_db_msg)
-            db.commit()
+            if chat_session and user_id:
+                ai_db_msg = Message(
+                    chat_session_id=chat_session.id,
+                    user_id=user_id,
+                    role="assistant",
+                    content=reply_text,
+                )
+                db.add(ai_db_msg)
+                db.commit()
         except Exception as db_err:
             print(f"DB Error saving AI response: {db_err}")
             db.rollback()
