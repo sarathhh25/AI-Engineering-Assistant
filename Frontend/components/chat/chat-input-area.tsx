@@ -18,9 +18,19 @@ interface ChatInputAreaProps {
   onSubmit: (text: string, attachments?: AttachedFile[]) => void
   disabled?: boolean
   onSelectSuggestion?: (text: string) => void
+  activeProject?: string
+  activeRepo?: string
+  onOpenProjects?: () => void
 }
 
-export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatInputAreaProps) {
+export function ChatInputArea({
+  onSubmit,
+  disabled,
+  onSelectSuggestion,
+  activeProject,
+  activeRepo,
+  onOpenProjects,
+}: ChatInputAreaProps) {
   const [text, setText] = useState('')
   const [repoContextEnabled, setRepoContextEnabled] = useState(true)
   const [showMentionMenu, setShowMentionMenu] = useState(false)
@@ -182,21 +192,22 @@ export function ChatInputArea({ onSubmit, disabled, onSelectSuggestion }: ChatIn
                   <span className="hidden sm:inline">Attach</span>
                 </button>
 
-                {/* Repo Context Status Badge */}
+                {/* Repo / Project Context Status Badge */}
                 <button
                   type="button"
-                  onClick={() => setRepoContextEnabled((prev) => !prev)}
-                  className={`px-2 py-0.5 rounded-md border text-[10px] font-mono transition-all flex items-center gap-1 cursor-pointer ${
+                  onClick={onOpenProjects || (() => setRepoContextEnabled((prev) => !prev))}
+                  className={`px-2.5 py-1 rounded-md border text-[11px] font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
                     repoContextEnabled
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                      : 'bg-muted text-muted-foreground border-border'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20'
+                      : 'bg-muted text-muted-foreground border-border hover:bg-secondary'
                   }`}
-                  title="Toggle Repository Vector Context"
+                  title={onOpenProjects ? 'Click to switch active project/repository' : 'Toggle Repository Vector Context'}
                 >
-                  <Database className="size-3" />
-                  <span className="hidden sm:inline">
-                    {repoContextEnabled ? 'Repo Context ON' : 'Repo Context OFF'}
+                  <Database className="size-3 text-emerald-500" />
+                  <span className="font-semibold text-foreground truncate max-w-[150px] sm:max-w-[220px]">
+                    {activeProject || activeRepo || 'ai-engineering-assistant'}
                   </span>
+                  <span className="text-[9px] text-emerald-500 font-bold hidden sm:inline">● Active</span>
                 </button>
               </div>
 

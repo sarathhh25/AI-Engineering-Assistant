@@ -55,12 +55,26 @@ Session tokens expire after 24 hours and refresh keys are persisted in Redis cac
 
 interface ChatWorkspaceProps {
   activeChatId?: string | null
+  activeProject?: string
+  activeRepo?: string
+  onOpenProjects?: () => void
   onOpenSettings?: () => void
+  onUpdateChatTitle?: (chatId: string, title: string) => void
 }
 
-export function ChatWorkspace({ activeChatId, onOpenSettings }: ChatWorkspaceProps) {
+export function ChatWorkspace({
+  activeChatId,
+  activeProject = 'AI Engineering Assistant',
+  activeRepo = 'ai-engineering-assistant',
+  onOpenProjects,
+  onOpenSettings,
+  onUpdateChatTitle,
+}: ChatWorkspaceProps) {
   const [messages, setMessages] = useState<ChatMessageData[]>(() => {
-    if (!activeChatId || activeChatId === 'c1') {
+    if (!activeChatId) {
+      return []
+    }
+    if (activeChatId === 'c1') {
       return INITIAL_MESSAGES
     }
     try {
@@ -96,6 +110,19 @@ export function ChatWorkspace({ activeChatId, onOpenSettings }: ChatWorkspacePro
       role: 'user',
       content: fullText,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }
+
+    // Auto-update chat title on first message
+    if (activeChatId && onUpdateChatTitle && messages.length === 0) {
+      const cleanTitle = text
+        .replace(/\[Attached Files:[^\]]+\]/g, '')
+        .split('\n')[0]
+        .replace(/^[-*#`_> ]+/, '')
+        .trim()
+      if (cleanTitle) {
+        const formatted = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1)
+        onUpdateChatTitle(activeChatId, formatted.length > 32 ? formatted.substring(0, 30) + '...' : formatted)
+      }
     }
 
     setMessages((prev) => [...prev, userMsg])
@@ -204,7 +231,7 @@ Provide temporary staging registry credentials and enable Docker Buildx cache-fr
 
     // Default: query FastAPI backend with text and attached files
     try {
-      const response = await apiClient.sendChatMessage(text, 'ai-engineering-assistant', attachedFilesPayload)
+      const response = await apiClient.sendChatMessage(text, activeRepo || 'ai-engineering-assistant', attachedFilesPayload)
       setSystemStatus(null)
 
       const aiReply: ChatMessageData = {
@@ -242,10 +269,10 @@ Provide temporary staging registry credentials and enable Docker Buildx cache-fr
                 <Sparkles className="size-6 text-primary" />
               </div>
               <h2 className="text-xl font-bold tracking-tight text-foreground">
-                How can AI Engineering Copilot help you today?
+                How can AI Engineering Copilot help with {activeProject || 'your project'}?
               </h2>
               <p className="text-xs text-muted-foreground max-w-md leading-relaxed">
-                Ask about code architecture, analyze pull requests, run risk predictions, or inspect repository telemetry.
+                Active repository: <code className="px-1.5 py-0.5 rounded bg-secondary font-mono text-primary font-semibold">{activeRepo}</code>. Ask about architecture, review pull requests, or debug code.
               </p>
             </div>
           ) : (
@@ -267,6 +294,9 @@ Provide temporary staging registry credentials and enable Docker Buildx cache-fr
       <ChatInputArea
         onSubmit={handleSendMessage}
         onSelectSuggestion={(prompt) => handleSendMessage(prompt)}
+        activeProject={activeProject}
+        activeRepo={activeRepo}
+        onOpenProjects={onOpenProjects}
       />
     </div>
   )

@@ -9,7 +9,7 @@ import { CommandPalette } from '@/components/command-palette'
 const DEFAULT_CHATS: ChatItem[] = []
 
 export function AppShell() {
-  const [activeTab, setActiveTab] = useState<'chat' | 'integrations' | 'settings' | 'personalization' | string>('dashboard')
+  const [activeTab, setActiveTab] = useState<'chat' | 'integrations' | 'settings' | 'personalization' | string>('chat')
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
   // Master Global Workspace State
@@ -23,13 +23,80 @@ export function AppShell() {
   // Modal dialog states
   const [dialogType, setDialogType] = useState<'projects' | 'repos' | 'agents' | 'knowledge' | null>(null)
 
-  // Load & Persist Chats to localStorage
+  // Restore saved activeTab, activeProject, and activeRepo on client mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('copilot_active_tab')
+      if (saved && saved !== 'dashboard') {
+        setActiveTab(saved)
+      } else {
+        setActiveTab('chat')
+      }
+      const savedProject = localStorage.getItem('copilot_active_project')
+      if (savedProject) setActiveProject(savedProject)
+      const savedRepo = localStorage.getItem('copilot_active_repo')
+      if (savedRepo) setActiveRepo(savedRepo)
+    } catch (e) {}
+  }, [])
+
+  // Persist activeTab whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('copilot_active_tab', activeTab)
+    } catch (e) {}
+  }, [activeTab])
+
+  // Persist activeProject and activeRepo whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('copilot_active_project', activeProject)
+      localStorage.setItem('copilot_active_repo', activeRepo)
+    } catch (e) {}
+  }, [activeProject, activeRepo])
+
+  // Helper to derive a clean, readable title from the first message
+  const deriveTitleFromMessage = (text: string): string => {
+    const clean = text
+      .replace(/\[Attached Files:[^\]]+\]/g, '')
+      .split('\n')[0]
+      .replace(/^[-*#`_> ]+/, '')
+      .trim()
+    if (!clean) return 'Engineering Chat'
+    const formatted = clean.charAt(0).toUpperCase() + clean.slice(1)
+    return formatted.length > 32 ? formatted.substring(0, 30) + '...' : formatted
+  }
+
+  // Load & Persist Chats to localStorage, and auto-title existing chats
   useEffect(() => {
     try {
       const savedChats = localStorage.getItem('copilot_chats')
       let parsedChats: ChatItem[] = []
       if (savedChats) {
         parsedChats = JSON.parse(savedChats)
+        // Automatically migrate any 'New Engineering Chat' that already has messages
+        let hasChanges = false
+        parsedChats = parsedChats.map((c) => {
+          if (c.title === 'New Engineering Chat') {
+            try {
+              const savedMsgs = localStorage.getItem(`copilot_chat_messages_${c.id}`)
+              if (savedMsgs) {
+                const msgs = JSON.parse(savedMsgs)
+                const firstUser = msgs.find((m: any) => m.role === 'user')?.content
+                if (firstUser) {
+                  hasChanges = true
+                  return {
+                    ...c,
+                    title: deriveTitleFromMessage(firstUser),
+                  }
+                }
+              }
+            } catch (err) {}
+          }
+          return c
+        })
+        if (hasChanges) {
+          localStorage.setItem('copilot_chats', JSON.stringify(parsedChats))
+        }
         setChats(parsedChats)
       }
       const savedCredits = localStorage.getItem('copilot_credits')
@@ -41,7 +108,7 @@ export function AppShell() {
       if (!savedChats || parsedChats.length === 0) {
         const initialChat: ChatItem = {
           id: `chat-${Date.now()}`,
-          title: 'New Engineering Chat',
+          title: 'Engineering Chat',
           timestamp: 'Just now',
           group: 'Today',
           isPinned: false,
@@ -68,10 +135,20 @@ export function AppShell() {
     }
   }
 
+  const handleUpdateChatTitle = useCallback((chatId: string, title: string) => {
+    setChats((prev) => {
+      const updated = prev.map((c) => (c.id === chatId ? { ...c, title } : c))
+      try {
+        localStorage.setItem('copilot_chats', JSON.stringify(updated))
+      } catch (e) {}
+      return updated
+    })
+  }, [])
+
   const handleNewChat = useCallback(() => {
     const newChatObj: ChatItem = {
       id: `chat-${Date.now()}`,
-      title: 'New Engineering Chat',
+      title: 'Engineering Chat',
       timestamp: 'Just now',
       group: 'Today',
       isPinned: false,
@@ -115,6 +192,10 @@ export function AppShell() {
       {/* Column 1: Left Fixed-Width Sidebar (Always Expanded) */}
       <SidebarLeft
         activeNav={activeTab}
+        activeProject={activeProject}
+        activeRepo={activeRepo}
+        onOpenProjects={() => setDialogType('projects')}
+        onOpenRepos={() => setDialogType('repos')}
         setActiveNav={(nav) => {
           if (nav === 'projects' || nav === 'knowledge-base') {
             setDialogType(nav === 'knowledge-base' ? 'knowledge' : (nav as any))
@@ -153,6 +234,9 @@ export function AppShell() {
               ? 'Settings & Preferences'
               : 'Conversational Workspace'
           }
+          activeProject={activeProject}
+          activeRepo={activeRepo}
+          onOpenProjects={() => setDialogType('projects')}
           onOpenSettings={() => setActiveTab('settings')}
         />
 
@@ -161,7 +245,11 @@ export function AppShell() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           activeChatId={activeChatId}
+          activeProject={activeProject}
+          activeRepo={activeRepo}
+          onOpenProjects={() => setDialogType('projects')}
           onOpenSettings={() => setActiveTab('settings')}
+          onUpdateChatTitle={handleUpdateChatTitle}
         />
       </div>
 

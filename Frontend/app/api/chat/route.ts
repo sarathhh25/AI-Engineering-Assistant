@@ -54,20 +54,25 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const { message, repo = "ai-engineering-assistant", files = [] } = body;
 
+        const authHeader = req.headers.get("authorization");
         const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
         let res;
         try {
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (authHeader) {
+                headers["Authorization"] = authHeader;
+            }
+
             res = await fetch(`${backendUrl}/api/chat`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers,
                 body: JSON.stringify({ message, repo, files }),
             });
-        } catch (fetchError) {
-            const fileSummary = files.length > 0 ? ` (${files.length} attached file(s): ${files.map((f: any) => f.fileName).join(", ")})` : "";
+        } catch (fetchError: any) {
             return NextResponse.json({
-                reply: `Received message for \`${repo}\`${fileSummary}: "${message}". (Backend fallback mode).`,
-                status: "fallback"
-            });
+                reply: `⚠️ Unable to reach backend service at ${backendUrl}. Please ensure FastAPI is running on port 8000.`,
+                status: "error"
+            }, { status: 502 });
         }
 
         if (res.ok) {
@@ -75,11 +80,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json(data);
         }
 
-        const fileSummary = files.length > 0 ? ` (${files.length} attached file(s): ${files.map((f: any) => f.fileName).join(", ")})` : "";
+        const errText = await res.text().catch(() => "Unknown error");
         return NextResponse.json({
-            reply: `Received message for \`${repo}\`${fileSummary}: "${message}". (Backend fallback mode).`,
-            status: "fallback"
-        });
+            reply: `⚠️ Backend returned error (${res.status}): ${errText}`,
+            status: "error"
+        }, { status: res.status });
     } catch (error: any) {
         return NextResponse.json({
             reply: `⚠️ Error processing chat request: ${error.message}`,

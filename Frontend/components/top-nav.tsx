@@ -8,66 +8,50 @@ import {
   CheckCircle2,
   Clock,
   ShieldCheck,
-  User,
-  Sliders,
-  LogOut,
+  Layers,
+  FolderKanban,
   ChevronDown,
-  Activity,
-  Layers
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { signOut } from 'next-auth/react'
-import { useUserProfile } from '@/lib/use-user-profile'
 
 export interface TopNavProps {
   onOpenSettings?: () => void
   activeTabTitle?: string
+  activeProject?: string
+  activeRepo?: string
+  onOpenProjects?: () => void
 }
 
 export function TopNav({
   onOpenSettings,
   activeTabTitle = 'Conversational Workspace',
+  activeProject,
+  activeRepo,
+  onOpenProjects,
 }: TopNavProps) {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
-  const profileRef = useRef<HTMLDivElement>(null)
-  const userProfile = useUserProfile()
-
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user_token')
-    localStorage.removeItem('user_profile')
-    localStorage.removeItem('user')
-    localStorage.clear()
-    sessionStorage.clear()
-    signOut({ redirect: false }).catch(() => {})
-    window.location.href = '/login'
-  }
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Handle click outside for notifications and profile popovers
+  // Handle click outside for notifications popover
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setNotificationsOpen(false)
       }
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setProfileOpen(false)
-      }
     }
-    if (notificationsOpen || profileOpen) {
+    if (notificationsOpen) {
       document.addEventListener('mousedown', handleClickOutside)
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [notificationsOpen, profileOpen])
+  }, [notificationsOpen])
 
   const toggleTheme = () => {
     const isDark = (resolvedTheme || theme) === 'dark'
@@ -80,12 +64,24 @@ export function TopNav({
     <header className="w-full shrink-0 flex flex-col z-20 select-none antialiased">
       {/* Clean Top Header Row for Center Workspace */}
       <div className="h-12 w-full border-b border-border/80 bg-background/95 backdrop-blur-md px-4 flex items-center justify-between gap-3 text-xs font-sans">
-        {/* Left Section: Active View Indicator */}
+        {/* Left Section: Active View Indicator & Active Project Selector */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-secondary/60 text-foreground font-medium text-xs border border-border/60">
             <Layers className="size-3.5 text-primary" />
-            <span>{activeTabTitle}</span>
+            <span suppressHydrationWarning>{activeTabTitle}</span>
           </div>
+
+          {activeProject && (
+            <button
+              onClick={onOpenProjects}
+              title="Click to switch active project context"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-all text-xs font-medium cursor-pointer"
+            >
+              <FolderKanban className="size-3.5 text-primary" />
+              <span className="font-semibold truncate max-w-[140px] sm:max-w-[200px]">{activeProject}</span>
+              <ChevronDown className="size-3 opacity-60 shrink-0" />
+            </button>
+          )}
         </div>
 
         {/* Right Section: System Status, Theme Switcher, Notifications & User Menu */}
@@ -117,7 +113,6 @@ export function TopNav({
             <button
               onClick={() => {
                 setNotificationsOpen((prev) => !prev)
-                setProfileOpen(false)
               }}
               title="Notifications"
               className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors relative border border-border/60 cursor-pointer"
@@ -157,64 +152,6 @@ export function TopNav({
                     <p className="text-muted-foreground text-[10px]">Estimated delivery on schedule.</p>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-
-          <div className="h-4 w-px bg-border mx-0.5 hidden sm:block" />
-
-          {/* User Profile Menu with Outside Click Ref */}
-          <div ref={profileRef} className="relative">
-            <button
-              onClick={() => {
-                setProfileOpen((prev) => !prev)
-                setNotificationsOpen(false)
-              }}
-              className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-xl hover:bg-secondary/80 transition-colors border border-border/60 cursor-pointer"
-            >
-              <div className="size-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-[10px] text-white overflow-hidden">
-                {userProfile.image ? (
-                  <img
-                    src={userProfile.image}
-                    alt={userProfile.name}
-                    className="size-full rounded-full object-cover"
-                  />
-                ) : (
-                  userProfile.initials
-                )}
-              </div>
-              <span className="font-medium text-foreground hidden sm:inline text-xs">{userProfile.name}</span>
-              <ChevronDown className="size-3 text-muted-foreground" />
-            </button>
-
-            {profileOpen && (
-              <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-popover p-1.5 shadow-2xl text-xs z-50 animate-in fade-in duration-100 space-y-1 backdrop-blur-xl">
-                <div className="p-2 border-b border-border space-y-0.5">
-                  <div className="font-semibold text-foreground">{userProfile.name}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono truncate">{userProfile.email}</div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    if (onOpenSettings) onOpenSettings()
-                    setProfileOpen(false)
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-secondary text-foreground flex items-center gap-2 transition-colors cursor-pointer"
-                >
-                  <Sliders className="size-3.5 text-muted-foreground" />
-                  <span>Settings & Preferences</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setProfileOpen(false)
-                    handleLogout()
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-destructive/10 text-destructive flex items-center gap-2 transition-colors cursor-pointer"
-                >
-                  <LogOut className="size-3.5" />
-                  <span>Log out</span>
-                </button>
               </div>
             )}
           </div>
