@@ -39,6 +39,10 @@ interface SidebarProps {
   activeNav?: string
   setActiveNav?: (nav: string) => void
   activeChatId?: string | null
+  activeProject?: string
+  activeRepo?: string
+  onOpenProjects?: () => void
+  onOpenRepos?: () => void
   onSelectChat?: (id: string) => void
   onNewChat?: () => void
   chats?: ChatItem[]
@@ -53,6 +57,10 @@ export function SidebarLeft({
   activeNav: externalActiveNav,
   setActiveNav: externalSetActiveNav,
   activeChatId: externalActiveChatId,
+  activeProject,
+  activeRepo,
+  onOpenProjects,
+  onOpenRepos,
   onSelectChat,
   onNewChat,
   chats: externalChats,
@@ -60,7 +68,7 @@ export function SidebarLeft({
   aiCredits = 8450,
   onSearchClick,
 }: SidebarProps) {
-  const [activeNav, setActiveNav] = useState(externalActiveNav || 'dashboard')
+  const [activeNav, setActiveNav] = useState(externalActiveNav || 'chat')
   const [internalChats, setInternalChats] = useState<ChatItem[]>(DEFAULT_CHATS)
   const chats = externalChats || internalChats
   const setChats = externalSetChats || setInternalChats
@@ -192,6 +200,7 @@ export function SidebarLeft({
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
+                suppressHydrationWarning
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition-all group cursor-pointer ${
                   isActive
                     ? 'bg-primary/15 text-primary border border-primary/25 font-semibold shadow-xs'

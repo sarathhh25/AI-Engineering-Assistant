@@ -19,10 +19,10 @@ interface ChatMessageProps {
   message: ChatMessageData
 }
 
-// Formats inline markdown like **bold** and `code`
+// Formats inline markdown like **bold**, *italic*, and `code`
 function formatInlineMarkdown(text: string) {
-  const parts = []
-  const regex = /(\*\*.*?\*\*|`.*?`)/g
+  const parts: React.ReactNode[] = []
+  const regex = /(\*\*.*?\*\*|`.*?`|\*.*?\*)/g
   let lastIndex = 0
   let match: RegExpExecArray | null
 
@@ -31,13 +31,13 @@ function formatInlineMarkdown(text: string) {
       parts.push(text.substring(lastIndex, match.index))
     }
     const token = match[0]
-    if (token.startsWith('**') && token.endsWith('**')) {
+    if (token.startsWith('**') && token.endsWith('**') && token.length > 4) {
       parts.push(
-        <strong key={match.index} className="font-bold text-foreground">
+        <strong key={match.index} className="font-semibold text-foreground">
           {token.slice(2, -2)}
         </strong>
       )
-    } else if (token.startsWith('`') && token.endsWith('`')) {
+    } else if (token.startsWith('`') && token.endsWith('`') && token.length > 2) {
       parts.push(
         <code
           key={match.index}
@@ -46,6 +46,14 @@ function formatInlineMarkdown(text: string) {
           {token.slice(1, -1)}
         </code>
       )
+    } else if (token.startsWith('*') && token.endsWith('*') && token.length > 2) {
+      parts.push(
+        <em key={match.index} className="italic text-foreground/90">
+          {token.slice(1, -1)}
+        </em>
+      )
+    } else {
+      parts.push(token)
     }
     lastIndex = regex.lastIndex
   }
@@ -55,6 +63,116 @@ function formatInlineMarkdown(text: string) {
   }
 
   return parts.length > 0 ? parts : text
+}
+
+function renderFormattedContent(content: string) {
+  // Extract fenced code blocks (```language\ncode\n```)
+  const segments: { type: 'code' | 'text'; content: string; language?: string }[] = []
+  const codeFenceRegex = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+
+  while ((match = codeFenceRegex.exec(content)) !== null) {
+    if (match.index > lastIdx) {
+      const textChunk = content.substring(lastIdx, match.index)
+      if (textChunk.trim()) {
+        segments.push({ type: 'text', content: textChunk })
+      }
+    }
+    segments.push({
+      type: 'code',
+      language: match[1]?.trim() || 'typescript',
+      content: match[2]?.trimEnd() || '',
+    })
+    lastIdx = codeFenceRegex.lastIndex
+  }
+
+  if (lastIdx < content.length) {
+    const trailing = content.substring(lastIdx)
+    if (trailing.trim()) {
+      segments.push({ type: 'text', content: trailing })
+    }
+  }
+
+  if (segments.length === 0) {
+    segments.push({ type: 'text', content })
+  }
+
+  return segments.map((seg, sIdx) => {
+    if (seg.type === 'code') {
+      return (
+        <CodeBlock
+          key={sIdx}
+          language={seg.language || 'typescript'}
+          code={seg.content}
+        />
+      )
+    }
+
+    const paragraphs = seg.content.split('\n\n')
+    return (
+      <div key={sIdx} className="space-y-2.5">
+        {paragraphs.map((para, pIdx) => {
+          const trimmed = para.trim()
+          if (!trimmed) return null
+
+          // Horizontal rule
+          if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+            return <hr key={pIdx} className="my-3 border-border/50" />
+          }
+
+          // Headings
+          if (trimmed.startsWith('# ')) {
+            return (
+              <h1 key={pIdx} className="text-base font-bold text-foreground pt-2">
+                {formatInlineMarkdown(trimmed.replace(/^#\s+/, ''))}
+              </h1>
+            )
+          }
+          if (trimmed.startsWith('## ')) {
+            return (
+              <h2 key={pIdx} className="text-sm font-bold text-foreground pt-1.5">
+                {formatInlineMarkdown(trimmed.replace(/^##\s+/, ''))}
+              </h2>
+            )
+          }
+          if (trimmed.startsWith('### ')) {
+            return (
+              <h3 key={pIdx} className="text-xs font-bold text-foreground pt-1">
+                {formatInlineMarkdown(trimmed.replace(/^###\s+/, ''))}
+              </h3>
+            )
+          }
+          if (trimmed.startsWith('#### ')) {
+            return (
+              <h4 key={pIdx} className="text-xs font-semibold text-foreground pt-0.5">
+                {formatInlineMarkdown(trimmed.replace(/^####\s+/, ''))}
+              </h4>
+            )
+          }
+
+          // Bullet / numbered list
+          if (/^[-*]\s+|\d+\.\s+/.test(trimmed)) {
+            const listItems = trimmed.split('\n')
+            return (
+              <ul key={pIdx} className="list-disc pl-4 space-y-1 text-foreground">
+                {listItems.map((item, iIdx) => {
+                  const cleanItem = item.replace(/^[-*]\s+|\d+\.\s+/, '')
+                  return <li key={iIdx}>{formatInlineMarkdown(cleanItem)}</li>
+                })}
+              </ul>
+            )
+          }
+
+          return (
+            <p key={pIdx} className="leading-relaxed">
+              {formatInlineMarkdown(trimmed)}
+            </p>
+          )
+        })}
+      </div>
+    )
+  })
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
@@ -109,30 +227,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
           )}
         </div>
 
-        {/* Text Paragraphs */}
+        {/* Text and Code Blocks */}
         <div className="space-y-2.5 text-foreground text-[13px] leading-relaxed">
-          {message.content.split('\n\n').map((paragraph, pIdx) => {
-            if (paragraph.startsWith('### ')) {
-              return (
-                <h3 key={pIdx} className="text-sm font-semibold text-foreground pt-1.5">
-                  {formatInlineMarkdown(paragraph.replace('### ', ''))}
-                </h3>
-              )
-            }
-            if (paragraph.startsWith('- ') || paragraph.startsWith('1. ') || paragraph.startsWith('2. ') || paragraph.startsWith('3. ')) {
-              const listItems = paragraph.split('\n')
-              return (
-                <ul key={pIdx} className="list-disc pl-4 space-y-1 text-foreground">
-                  {listItems.map((item, iIdx) => (
-                    <li key={iIdx}>
-                      {formatInlineMarkdown(item.replace(/^[-*]|\d+\.\s*/, ''))}
-                    </li>
-                  ))}
-                </ul>
-              )
-            }
-            return <p key={pIdx}>{formatInlineMarkdown(paragraph)}</p>
-          })}
+          {renderFormattedContent(message.content)}
         </div>
 
         {/* File Reference Pills */}

@@ -89,16 +89,25 @@ class ApiClient {
     files: Array<{ fileName: string; content: string }> = []
   ): Promise<{ reply: string; status?: string; references?: string[] }> {
     try {
+      const token = typeof window !== 'undefined'
+        ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
+        : null
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
       return await this.request('/api/chat', {
         method: 'POST',
+        headers,
         body: JSON.stringify({ message, repo, files }),
-        timeoutMs: 25000,
+        timeoutMs: 40000,
+        retries: 1,
       })
     } catch (e: any) {
-      const filesSummary = files.length > 0 ? ` (${files.length} attached file(s): ${files.map(f => f.fileName).join(', ')})` : ''
       return {
-        reply: `Received message for \`${repo}\`${filesSummary}: "${message}". (Backend fallback mode). All repository files indexed & verified clean.`,
-        status: 'fallback',
+        reply: `⚠️ Connection Error: Unable to complete request with the backend server (${e.message || 'Request failed'}). Make sure the backend service is running on port 8000.`,
+        status: 'error',
         references: [],
       }
     }

@@ -55,10 +55,10 @@ with maintenance_engine.connect() as conn:
         {"name": DB_NAME},
     )
     if result.fetchone():
-        print(f"✅ Database '{DB_NAME}' already exists.")
+        print(f"[OK] Database '{DB_NAME}' already exists.")
     else:
         conn.execute(text(f'CREATE DATABASE "{DB_NAME}"'))
-        print(f"✅ Database '{DB_NAME}' created successfully.")
+        print(f"[OK] Database '{DB_NAME}' created successfully.")
 
 maintenance_engine.dispose()
 
@@ -75,7 +75,7 @@ from Backend.database import (
 )
 
 Base.metadata.create_all(bind=engine)
-print("✅ All tables created / verified.")
+print("[OK] All tables created / verified.")
 
 # ---------------------------------------------------------------------------
 # Step 3 – Seed sample data
@@ -122,9 +122,9 @@ try:
 
     # ---- User Settings ----
     db.add_all([
-        UserSetting(user_id=user_sarath.id, preferred_model="gemini-2.5-flash", theme="dark"),
-        UserSetting(user_id=user_devbot.id, preferred_model="gemini-2.0-flash", theme="dark"),
-        UserSetting(user_id=user_admin.id, preferred_model="gemini-2.5-pro", theme="light"),
+        UserSetting(user_id=user_sarath.id, preferred_model="gemini-3.6-flash", theme="dark"),
+        UserSetting(user_id=user_devbot.id, preferred_model="gemini-3.6-flash", theme="dark"),
+        UserSetting(user_id=user_admin.id, preferred_model="gemini-3.7-flash", theme="light"),
     ])
 
     # ---- Repositories ----
@@ -307,7 +307,7 @@ try:
     ])
 
     db.commit()
-    print("✅ Seed data inserted successfully!")
+    print("[OK] Seed data inserted successfully!")
 
     # ---- Summary ----
     print("\n" + "=" * 60)

@@ -13,6 +13,10 @@ interface WorkspaceMainProps {
   setActiveTab?: (tab: any) => void
   onOpenSettings?: () => void
   activeChatId?: string | null
+  activeProject?: string
+  activeRepo?: string
+  onOpenProjects?: () => void
+  onUpdateChatTitle?: (chatId: string, title: string) => void
 }
 
 export function WorkspaceMain({
@@ -20,8 +24,12 @@ export function WorkspaceMain({
   setActiveTab: externalSetActiveTab,
   onOpenSettings,
   activeChatId,
+  activeProject,
+  activeRepo,
+  onOpenProjects,
+  onUpdateChatTitle,
 }: WorkspaceMainProps) {
-  const [internalActiveTab, setInternalActiveTab] = useState<string>('dashboard')
+  const [internalActiveTab, setInternalActiveTab] = useState<string>('chat')
   const currentTab = externalActiveTab || internalActiveTab
 
   return (
@@ -48,9 +56,13 @@ export function WorkspaceMain({
           <SettingsPage initialSection="personalization" />
         ) : (
           <ChatWorkspace
-            key={activeChatId || 'default'}
+            key={`${activeChatId || 'default'}_${activeRepo || 'default'}`}
             activeChatId={activeChatId}
+            activeProject={activeProject}
+            activeRepo={activeRepo}
+            onOpenProjects={onOpenProjects}
             onOpenSettings={onOpenSettings}
+            onUpdateChatTitle={onUpdateChatTitle}
           />
         )}
       </div>

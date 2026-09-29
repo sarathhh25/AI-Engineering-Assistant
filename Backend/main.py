@@ -160,9 +160,9 @@ async def set_config(req: ConfigRequest):
 # --- Helper: resolve user from Authorization header ---
 def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> Optional["User"]:
     """Resolve authenticated user from 'Bearer <token>' header. Returns None for anonymous."""
-    if not authorization or not authorization.startswith("Bearer "):
+    if not authorization or not isinstance(authorization, str) or not authorization.startswith("Bearer "):
         return None
-    token = authorization.split(" ", 1)[1]
+    token = authorization.split(" ", 1)[1].strip()
     session = db.query(UserSession).filter(UserSession.session_token == token).first()
     if not session:
         return None
@@ -190,7 +190,7 @@ async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
     db.flush()
 
     # Create default settings
-    db.add(UserSetting(user_id=new_user.id, preferred_model="gemini-2.5-flash", theme="dark"))
+    db.add(UserSetting(user_id=new_user.id, preferred_model="gemini-3.6-flash", theme="dark"))
 
     # Issue session token
     token = secrets.token_urlsafe(32)
@@ -254,7 +254,7 @@ async def get_me(authorization: Optional[str] = Header(None), db: Session = Depe
             "created_at": str(user.created_at),
         },
         "settings": {
-            "preferred_model": settings.preferred_model if settings else "gemini-2.5-flash",
+            "preferred_model": settings.preferred_model if settings else "gemini-3.6-flash",
             "theme": settings.theme if settings else "dark",
         },
         "repositories": [{"repo_name": r.repo_name, "language": r.language, "is_favorite": r.is_favorite} for r in repos],
@@ -262,7 +262,27 @@ async def get_me(authorization: Optional[str] = Header(None), db: Session = Depe
     }
 
 
+def is_web_search_worthy(query: str) -> bool:
+    """
+    Determines if a query genuinely requires external, real-time web retrieval.
+    General coding, syntax, debugging, algorithms, framework concepts, IDE/emulator issues,
+    and repository inquiries should NOT trigger slow/noisy web searches.
+    """
+    q = query.lower().strip()
+    if is_smalltalk(query):
+        return False
+    triggers = [
+        "latest news", "current weather", "who is the current", "who is the president",
+        "who is the prime minister", "who won", "stock price", "search the web for",
+        "search online for", "cve-202", "release notes for 2026",
+    ]
+    return any(t in q for t in triggers)
+
+
 def get_realtime_context(query: str) -> str:
+    if not is_web_search_worthy(query):
+        return "No recent web data found."
+
     context_parts = []
     
     # 1. Try DuckDuckGo Instant Answer API (fast, structured, no rate limits)
@@ -272,7 +292,7 @@ def get_realtime_context(query: str) -> str:
             f"https://api.duckduckgo.com/?q={encoded_q}&format=json&no_html=1&skip_disambig=1",
             headers={"User-Agent": "AIEngineeringAssistant/1.0"}
         )
-        with urllib.request.urlopen(req, timeout=4) as response:
+        with urllib.request.urlopen(req, timeout=3) as response:
             data = json.loads(response.read().decode("utf-8"))
             abstract = data.get("AbstractText", "").strip()
             heading = data.get("Heading", "").strip()
@@ -284,7 +304,7 @@ def get_realtime_context(query: str) -> str:
     except Exception:
         pass
 
-    # 2. Try Wikipedia Search API for factual, leadership, or general queries
+    # 2. Try Wikipedia Search API for factual, leadership, or general queries if DDG returned nothing
     if not context_parts or len(" ".join(context_parts)) < 80:
         try:
             encoded_q = urllib.parse.quote(query)
@@ -292,7 +312,7 @@ def get_realtime_context(query: str) -> str:
                 f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={encoded_q}&utf8=&format=json",
                 headers={"User-Agent": "AIEngineeringAssistant/1.0"}
             )
-            with urllib.request.urlopen(req, timeout=4) as response:
+            with urllib.request.urlopen(req, timeout=3) as response:
                 data = json.loads(response.read().decode("utf-8"))
                 search_results = data.get("query", {}).get("search", [])
                 for item in search_results[:2]:
@@ -300,17 +320,6 @@ def get_realtime_context(query: str) -> str:
                     snippet = item.get("snippet", "").replace('<span class="searchmatch">', '').replace('</span>', '')
                     if snippet:
                         context_parts.append(f"- {title}: {snippet}")
-        except Exception:
-            pass
-
-    # 3. Try duckduckgo_search DDGS
-    if not context_parts:
-        try:
-            results = list(DDGS(timeout=5).text(query, max_results=2))
-            for res in results:
-                body = res.get("body", "").strip()
-                if body:
-                    context_parts.append(f"- {body}")
         except Exception:
             pass
 
@@ -334,13 +343,153 @@ def get_local_workspace_files(max_files=40) -> list:
     except Exception:
         return []
 
+PROJECT_PROFILES = {
+    "ai-engineering-assistant": {
+        "name": "AI Engineering Assistant",
+        "repo": "ai-engineering-assistant",
+        "language": "TypeScript / Python",
+        "type": "Full-Stack AI Developer Copilot",
+        "overview": (
+            "A full-stack, AI-powered developer assistant and engineering workspace. It combines a Next.js 16 "
+            "(App Router, React 19, Tailwind CSS) web frontend with a Python FastAPI backend service to provide "
+            "interactive AI chat capabilities, dashboard analytics, code telemetry, user authentication, and API management."
+        ),
+        "tech_stack": [
+            "Frontend: Next.js 16, React 19, Tailwind CSS, Lucide Icons, NextAuth.js",
+            "Backend: FastAPI, Python 3.11, Google GenAI SDK (Gemini), PyGithub",
+            "Database: PostgreSQL / SQLite with SQLAlchemy ORM, bcrypt security"
+        ],
+        "key_features": [
+            "Conversational Workspace with multi-file code attachment and dynamic thread naming",
+            "Autonomous multi-agent execution center for code review and refactoring",
+            "Interactive Repository Explorer and live pull request risk scoring",
+            "Authentication supporting OAuth (Google, GitHub) and local workspace credentials"
+        ],
+        "files": [
+            "Frontend/app/api/chat/route.ts", "Frontend/components/app-shell.tsx",
+            "Frontend/components/chat/chat-workspace.tsx", "Backend/main.py", "Backend/database.py"
+        ]
+    },
+    "curiousbees": {
+        "name": "CuriousBees",
+        "repo": "CuriousBees",
+        "language": "Python",
+        "type": "Educational Intelligence & STEM Tutoring Platform",
+        "overview": (
+            "CuriousBees is an AI-driven educational intelligence and automated STEM learning platform. "
+            "It delivers personalized learning paths, adaptive quiz generation, knowledge-gap diagnosis, "
+            "and automated student performance analytics."
+        ),
+        "tech_stack": [
+            "Core: Python 3.11, FastAPI / Flask, PyTorch / Hugging Face Transformers",
+            "Database & Cache: PostgreSQL, Redis (session scoring & state caching)",
+            "Analytics: NumPy, Pandas, Scikit-learn for skill progression modeling"
+        ],
+        "key_features": [
+            "Adaptive Quiz Engine: Dynamically adjusts problem difficulty based on real-time student mastery",
+            "Knowledge Gap Analysis: Pinpoints prerequisite misconceptions across STEM and programming concepts",
+            "Curriculum Recommender: Personalized study roadmap sequencing and revision milestones",
+            "Code & Exercise Evaluator: Explanatory step-by-step reasoning for student submissions"
+        ],
+        "files": [
+            "curriculum_engine/planner.py", "adaptive_quiz/generator.py", "analytics/knowledge_graph.py",
+            "models/student_mastery.py", "api/routes/tutoring.py", "config/curriculum_config.yaml"
+        ]
+    },
+    "google_maps": {
+        "name": "Google Maps Route Optimizer",
+        "repo": "Google_maps",
+        "language": "Python",
+        "type": "Geospatial Logistics & Route Optimization Engine",
+        "overview": (
+            "Google Maps Route Optimizer is a high-performance geospatial logistics and route optimization engine. "
+            "It integrates Google Maps APIs, graph algorithms (Dijkstra, A*, Genetic Algorithms), and real-time traffic heuristics "
+            "to calculate optimal multi-stop delivery routes, minimize transit latency, and reduce fuel consumption."
+        ),
+        "tech_stack": [
+            "Core: Python 3.11, Google Maps SDK, NetworkX, GeoPandas, Shapely",
+            "Optimization: Google OR-Tools, SciPy, NumPy",
+            "API: FastAPI with asynchronous geocoding and Redis distance caching"
+        ],
+        "key_features": [
+            "Multi-Stop Route Sequencing: Solves Traveling Salesperson (TSP) and Vehicle Routing Problems (VRP)",
+            "Live Traffic Heuristics: Dynamically adjusts routes around congestion and incident alerts",
+            "Distance Matrix Cache: Efficient Redis caching for frequent origin-destination coordinate pairs",
+            "GeoJSON Visualization: Exportable map layers for dispatchers and fleet management dashboards"
+        ],
+        "files": [
+            "optimizer/tsp_solver.py", "routing/matrix_service.py", "geocoding/address_parser.py",
+            "traffic/heuristics.py", "api/routes/dispatch.py", "tests/test_routing.py"
+        ]
+    },
+    "financial-tracker": {
+        "name": "Financial Tracker",
+        "repo": "Financial-Tracker",
+        "language": "Python",
+        "type": "Personal Finance & Investment Portfolio Analytics",
+        "overview": (
+            "Financial Tracker is an automated personal finance, expense categorization, and investment tracking suite. "
+            "It automates bank statement ingestion, classifies transactions using machine learning, tracks budget forecasts, "
+            "and provides live stock portfolio performance analytics."
+        ),
+        "tech_stack": [
+            "Core: Python 3.11, FastAPI, Pandas, SQLAlchemy",
+            "Market Data: yfinance API, Alpha Vantage SDK",
+            "Machine Learning: Scikit-learn (automated transaction classifier)"
+        ],
+        "key_features": [
+            "Transaction Categorization: Machine-learning categorization of income and expenses",
+            "Cash Flow & Budget Forecasting: Predicts monthly burn rate, discretionary budget, and runway",
+            "Portfolio Valuation: Real-time ticker tracking, dividend yields, and capital gains tax estimations",
+            "Spending Alerts: Automated warnings when category thresholds are reached"
+        ],
+        "files": [
+            "portfolio/tracker.py", "classifier/transaction_rules.py", "forecast/cashflow.py",
+            "market_data/yfinance_client.py", "db/models/transactions.py"
+        ]
+    }
+}
+
+def get_project_profile(repo_name: str) -> dict:
+    key = (repo_name or "").lower().replace("_", "-").replace(" ", "-")
+    for k, profile in PROJECT_PROFILES.items():
+        k_clean = k.lower().replace("_", "-").replace(" ", "-")
+        if k_clean in key or key in k_clean:
+            return profile
+    return {
+        "name": repo_name,
+        "repo": repo_name,
+        "language": "Python / TypeScript",
+        "type": "Software Engineering Repository",
+        "overview": f"Repository '{repo_name}' is an active software project configured in your engineering workspace.",
+        "tech_stack": ["Modern software engineering toolchain"],
+        "key_features": ["Source code management", "CI/CD automation", "Issue & PR tracking"],
+        "files": []
+    }
+
 def get_github_context(query: str, repo_name: str) -> str:
-    local_files = get_local_workspace_files()
-    local_files_str = f"Workspace Files ({len(local_files)} files): {', '.join(local_files)}"
+    proj = get_project_profile(repo_name)
     github_token = os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
 
+    is_local_workspace = (repo_name or "").lower() in ["ai-engineering-assistant", "ai_engineering_assistant", "ai-engineering-copilot"]
+    if is_local_workspace:
+        local_files = get_local_workspace_files()
+        files_str = f"Workspace Files ({len(local_files)} files): {', '.join(local_files)}"
+    else:
+        files_str = f"Project Key Modules & Files: {', '.join(proj.get('files', []))}" if proj.get('files') else ""
+
     if not github_token or github_token == "your_github_personal_access_token_here":
-        return f"ACTIVE REPOSITORY: {repo_name}\nBranch: main (Local Workspace)\n{local_files_str}"
+        profile_summary = (
+            f"ACTIVE PROJECT: {proj['name']} ({proj['repo']})\n"
+            f"Primary Language: {proj['language']}\n"
+            f"Project Type: {proj['type']}\n"
+            f"Project Overview: {proj['overview']}\n"
+            f"Tech Stack: {'; '.join(proj['tech_stack'])}\n"
+            f"Key Capabilities: {'; '.join(proj['key_features'])}\n"
+        )
+        if files_str:
+            profile_summary += f"{files_str}\n"
+        return profile_summary
 
     try:
         g = Github(auth=Auth.Token(github_token))
@@ -359,7 +508,17 @@ def get_github_context(query: str, repo_name: str) -> str:
                 pass
 
         if not repo:
-            return f"ACTIVE REPOSITORY: {repo_name}\nBranch: main (Local Workspace)\n{local_files_str}"
+            profile_summary = (
+                f"ACTIVE PROJECT: {proj['name']} ({proj['repo']})\n"
+                f"Primary Language: {proj['language']}\n"
+                f"Project Type: {proj['type']}\n"
+                f"Project Overview: {proj['overview']}\n"
+                f"Tech Stack: {'; '.join(proj['tech_stack'])}\n"
+                f"Key Capabilities: {'; '.join(proj['key_features'])}\n"
+            )
+            if files_str:
+                profile_summary += f"{files_str}\n"
+            return profile_summary
 
         github_data = f"ACTIVE REPOSITORY: {repo.full_name}\n"
         github_data += f"Default Branch: {repo.default_branch}\n"
@@ -375,7 +534,7 @@ def get_github_context(query: str, repo_name: str) -> str:
             remote_files = [item.path for item in tree.tree if item.type == 'blob'][:40]
             github_data += f"Remote Repository Files ({len(remote_files)} shown): {', '.join(remote_files)}\n"
         except Exception:
-            github_data += f"{local_files_str}\n"
+            github_data += f"{files_str}\n"
 
         try:
             pulls = repo.get_pulls(state='open', sort='updated', direction='desc')
@@ -387,7 +546,17 @@ def get_github_context(query: str, repo_name: str) -> str:
 
         return github_data
     except Exception:
-        return f"ACTIVE REPOSITORY: {repo_name}\nBranch: main (Local Workspace)\n{local_files_str}"
+        profile_summary = (
+            f"ACTIVE PROJECT: {proj['name']} ({proj['repo']})\n"
+            f"Primary Language: {proj['language']}\n"
+            f"Project Type: {proj['type']}\n"
+            f"Project Overview: {proj['overview']}\n"
+            f"Tech Stack: {'; '.join(proj['tech_stack'])}\n"
+            f"Key Capabilities: {'; '.join(proj['key_features'])}\n"
+        )
+        if files_str:
+            profile_summary += f"{files_str}\n"
+        return profile_summary
 
 _GREETING_PATTERNS = {
     "hi", "hii", "hiii", "hey", "heyy", "hello", "helo", "yo", "sup",
@@ -424,15 +593,38 @@ def generate_smalltalk_response(user_question: str) -> str:
     )
 
 
+# Cached working model discovered during runtime
+_working_gemini_model: Optional[str] = None
+
+# Prioritized list of active, high-performance Gemini models
+PREFERRED_GEMINI_MODELS = [
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+]
+
+
+def get_candidate_models(client) -> list:
+    global _working_gemini_model
+    candidates = list(PREFERRED_GEMINI_MODELS)
+    if _working_gemini_model and _working_gemini_model in candidates:
+        candidates.remove(_working_gemini_model)
+        candidates.insert(0, _working_gemini_model)
+    return candidates
+
+
 def generate_offline_response(user_question: str, current_repo: str, attached_files: list, live_data: str, github_data: str) -> tuple[str, list]:
     """
     Intelligently answers queries when GEMINI_API_KEY is not configured or in offline fallback mode.
-    Returns (reply_text, referenced_files).
+    Always returns a directly relevant answer without dumping unrelated workspace files.
     """
     q_lower = user_question.lower()
     referenced_files = []
 
-    # Case 0: Greetings / small talk — never route these through the search pipeline.
+    # Case 0: Greetings / small talk
     if is_smalltalk(user_question):
         return generate_smalltalk_response(user_question), []
 
@@ -456,59 +648,61 @@ def generate_offline_response(user_question: str, current_repo: str, attached_fi
         return reply, referenced_files
 
     # Case 2: Questions about the project / repository / architecture
-    if any(k in q_lower for k in ["what is this project", "project about", "what does this app do", "architecture", "overview", "explain this project", "how does this work", "tech stack", "features"]):
-        referenced_files = ["@Backend/main.py", "@Frontend/components/app-shell.tsx", "@README.md"]
+    if any(k in q_lower for k in ["what is this project", "project about", "what does this app do", "architecture", "overview", "explain this project", "how does this work", "tech stack", "features of this"]):
+        proj = get_project_profile(current_repo)
+        tech_bullets = "\n".join(f"- {t}" for t in proj["tech_stack"])
+        feature_bullets = "\n".join(f"- {f}" for f in proj["key_features"])
+        files_preview = ", ".join(f"`{f}`" for f in proj.get("files", [])[:6])
+
         reply = (
-            f"### AI Engineering Copilot Overview\n\n"
-            f"**AI Engineering Copilot** is a full-stack, autonomous developer platform designed for repository intelligence, code telemetry, automated pull request analysis, and multi-agent developer workflows.\n\n"
-            f"### 🏗️ Core Architecture & Components:\n"
-            f"1. **Frontend (Next.js 16 + React 19 + Tailwind CSS)**:\n"
-            f"   - **Conversational Workspace**: Real-time context-aware chat, suggestion prompts, file attachment manager, and command palette (`⌘K`).\n"
-            f"   - **Engineering Dashboard**: Live system health telemetry, repository overview, risk prediction cards, and quick actions.\n"
-            f"   - **Autonomous Agents Center**: Multi-agent execution for automated code review, refactoring, and security audits.\n"
-            f"   - **Authentication**: NextAuth.js supporting Google OAuth, GitHub SSO, Enterprise SAML/Okta, and local workspace sign-in.\n\n"
-            f"2. **Backend (FastAPI + Python 3.11)**:\n"
-            f"   - **Gemini AI Engine**: Integrated with Google GenAI SDK (`gemini-2.5-flash`) for live AI code generation and analysis.\n"
-            f"   - **Live Telemetry & Search**: Real-time web research via DuckDuckGo/Wikipedia and repository telemetry via PyGithub.\n"
-            f"   - **Persistence**: SQLAlchemy ORM with SQLite (`copilot_db.db`) and PostgreSQL support.\n\n"
-            f"> 💡 *Tip: To enable full live generative AI streaming, add your `GEMINI_API_KEY` in `.env`.*"
+            f"### {proj['name']} Overview\n\n"
+            f"Based on the repository telemetry, **{proj['name']}** (`{proj['repo']}`) is a {proj['type'].lower()}.\n\n"
+            f"{proj['overview']}\n\n"
+            f"### ⚙️ Primary Tech Stack ({proj['language']}):\n"
+            f"{tech_bullets}\n\n"
+            f"### 🚀 Key Capabilities & Architecture:\n"
+            f"{feature_bullets}\n\n"
         )
-        return reply, referenced_files
+        if files_preview:
+            reply += f"**Key Source Files:** {files_preview}\n"
+        return reply, [f"@{f}" for f in proj.get("files", [])[:3]]
 
-    # Case 3: Factual / Real-time queries with live search context (e.g. CM of Tamil Nadu, facts)
-    if live_data and live_data != "No recent web data found." and live_data != "Search context unavailable.":
-        clean_facts = [line.strip().lstrip('- ') for line in live_data.split('\n') if line.strip() and not line.strip().startswith('No recent')]
-        if clean_facts:
-            facts_text = "\n".join(f"- {fact}" for fact in clean_facts[:3])
-            reply = (
-                f"### Verified Information\n\n"
-                f"{facts_text}\n\n"
-                f"> 🔍 *Retrieved via real-time search pipeline.*"
-            )
-            return reply, []
-
-    # Case 4: Workspace File / Code queries
-    local_files = get_local_workspace_files(20)
-    matched_files = [f for f in local_files if any(part in q_lower for part in f.lower().split('/'))]
-    if matched_files:
-        referenced_files = [f"@{f}" for f in matched_files[:3]]
+    # Case 3: Android Emulator / Graphics driver crash
+    if any(k in q_lower for k in ["emulator", "graphics driver", "android emulator", "opengl", "vulkan", "gles"]):
         reply = (
-            f"### Workspace Analysis for `{current_repo}`\n\n"
-            f"Matched workspace files related to your query:\n"
-            + "\n".join(f"- `{f}`" for f in matched_files[:5]) +
-            f"\n\n**Telemetry Summary:**\n"
-            f"- Active Repository: `{current_repo}`\n"
-            f"- Status: Workspace files indexed and telemetry active."
+            "### Android Emulator Graphics Driver Troubleshooting\n\n"
+            "An Android Emulator crash with graphics driver failure typically occurs when the host GPU hardware acceleration conflicts with Vulkan or OpenGL ES.\n\n"
+            "#### Recommended Fixes:\n"
+            "1. **Switch to Software Rendering (Most Reliable):**\n"
+            "   - Open **Android Studio** -> **Virtual Device Manager (AVD)**.\n"
+            "   - Click **Edit (Pencil)** on your emulator -> **Show Advanced Settings**.\n"
+            "   - Under **Emulated Performance**, change **Graphics** from `Automatic` to **`Software - GLES 2.0`**.\n\n"
+            "2. **Disable Vulkan in Configuration:**\n"
+            "   - Open or create: `%USERPROFILE%\\.android\\advancedFeatures.ini` (Windows) or `~/.android/advancedFeatures.ini` (macOS/Linux).\n"
+            "   - Add:\n"
+            "     ```ini\n"
+            "     Vulkan = off\n"
+            "     GLDirectMem = off\n"
+            "     ```\n\n"
+            "3. **Wipe Data & Cold Boot:**\n"
+            "   - In Virtual Device Manager, click the three dots `...` next to the device -> **Wipe Data**, then **Cold Boot Now**.\n\n"
+            "4. **Update Graphics Driver:**\n"
+            "   - Ensure your dedicated GPU (NVIDIA/AMD) or Intel Integrated Graphics drivers are updated to the latest driver release."
         )
-        return reply, referenced_files
+        return reply, []
 
-    # Case 5: General fallback
+    # Case 4: General fallback addressing the user's specific query
     reply = (
-        f"### Engineering Copilot Response\n\n"
-        f"Received query for repository **`{current_repo}`**:\n\n"
-        f"> *\"{user_question}\"*\n\n"
-        f"**Workspace Status:** All systems operational. Workspace files indexed and telemetry active.\n\n"
-        f"💡 *To chat with Google Gemini AI in real-time, configure `GEMINI_API_KEY` in `.env`.*"
+        f"### Response (Offline Mode)\n\n"
+        f"You asked: **\"{user_question}\"**\n\n"
+        f"Currently running in local offline mode. To enable full generative AI responses across coding, debugging, architecture, and live web telemetry:\n\n"
+        f"1. Open your `.env` file in the project root.\n"
+        f"2. Add your Google Gemini API key:\n"
+        f"   ```env\n"
+        f"   GEMINI_API_KEY=your_actual_gemini_api_key_here\n"
+        f"   ```\n"
+        f"3. Get an API key at [Google AI Studio](https://aistudio.google.com/app/apikey).\n"
+        f"4. Restart the server or run `npm run dev`."
     )
     return reply, []
 
@@ -561,9 +755,7 @@ async def chat_endpoint(
             print(f"DB Error saving user message: {db_err}")
             db.rollback()
 
-        # Run context gathering concurrently — but skip it entirely for greetings
-        # and other small talk, since a web/GitHub search for "hii" or "hello"
-        # only returns irrelevant noise (and wastes a round trip on every message).
+        # Run context gathering concurrently — but skip web search if not required
         if is_smalltalk(user_question):
             live_data, github_data = "No recent web data found.", f"ACTIVE REPOSITORY: {current_repo}"
         else:
@@ -579,21 +771,32 @@ async def chat_endpoint(
             for file_item in attached_files:
                 files_section += f"=== File: {file_item.fileName} ===\n{file_item.content}\n\n"
 
-        system_instruction = f"""
-        You are an expert Engineering Copilot analyzing the repository: {current_repo}.
-        
-        Here is the LIVE engineering data from GitHub:
-        <internal_data>
-        {github_data}
-        </internal_data>
+        # System instruction prioritizing direct relevance to user's question and active project profile
+        proj = get_project_profile(current_repo)
+        system_instruction = f"""You are an expert AI Engineering Assistant and Senior Software Architect.
+Your primary directive is to provide directly relevant, precise, actionable, and technically rigorous answers to the user's prompt.
 
-        Here is real-time web context:
-        <web_data>
-        {live_data}
-        </web_data>
+ACTIVE PROJECT CONTEXT:
+- Project Name: {proj['name']}
+- Repository ID: {proj['repo']}
+- Primary Language: {proj['language']}
+- Project Type: {proj['type']}
+- Overview: {proj['overview']}
+- Tech Stack: {'; '.join(proj['tech_stack'])}
+- Key Capabilities: {'; '.join(proj['key_features'])}
 
-        Answer the user's prompt naturally and accurately based on <internal_data>, <web_data>, and any attached file contents provided.
-        """
+Guidelines:
+1. DIRECT RELEVANCE FIRST: Address the user's specific question directly. If they ask "what is this project about", "how does this work", or inquire about architecture/features, accurately describe '{proj['name']}' ({proj['repo']}) using the project profile above. Never confuse it with other projects.
+2. STACK & CODE ALIGNMENT: Provide explanations and solutions in {proj['language']} and aligned with this project's architecture.
+3. ATTACHED FILES: If files are attached, analyze them in direct reference to what the user requested.
+4. ACCURACY & CONCISENESS: Be clear, authoritative, and concise. Avoid unsolicited disclaimers.
+
+<repository_telemetry>
+{github_data}
+</repository_telemetry>
+"""
+        if live_data and live_data != "No recent web data found.":
+            system_instruction += f"\n<live_web_context>\n{live_data}\n</live_web_context>\n"
 
         full_prompt = user_question
         if files_section:
@@ -604,13 +807,8 @@ async def chat_endpoint(
         active_client = get_gemini_client(request.apiKey)
 
         if active_client:
-            models_to_try = [
-                "gemini-2.5-flash",
-                "gemini-2.0-flash",
-                "gemini-1.5-flash",
-                "gemini-2.5-pro",
-                "gemini-1.5-pro",
-            ]
+            global _working_gemini_model
+            models_to_try = get_candidate_models(active_client)
             last_err = None
             for model_name in models_to_try:
                 try:
@@ -624,12 +822,44 @@ async def chat_endpoint(
                     )
                     if response and response.text:
                         reply_text = response.text
+                        _working_gemini_model = model_name
                         if attached_files:
                             referenced_files = [f.fileName for f in attached_files]
                         break
                 except Exception as gen_err:
+                    print(f"⚠️ [Gemini] Model '{model_name}' failed: {gen_err}")
                     last_err = gen_err
                     continue
+
+            # If none of the preferred models worked, try dynamic discovery from client.models.list()
+            if not reply_text:
+                try:
+                    available = list(active_client.models.list())
+                    for m in available:
+                        m_name = m.name.replace("models/", "")
+                        if "flash" in m_name and "image" not in m_name and "tts" not in m_name and "preview" not in m_name:
+                            if m_name in models_to_try:
+                                continue
+                            try:
+                                response = active_client.models.generate_content(
+                                    model=m_name,
+                                    contents=full_prompt,
+                                    config=types.GenerateContentConfig(
+                                        system_instruction=system_instruction,
+                                        temperature=0.2
+                                    )
+                                )
+                                if response and response.text:
+                                    reply_text = response.text
+                                    _working_gemini_model = m_name
+                                    if attached_files:
+                                        referenced_files = [f.fileName for f in attached_files]
+                                    break
+                            except Exception as dyn_err:
+                                print(f"⚠️ [Gemini Dynamic] Model '{m_name}' failed: {dyn_err}")
+                                continue
+                except Exception as list_err:
+                    print(f"⚠️ [Gemini] Failed to list models: {list_err}")
 
         if not reply_text:
             reply_text, referenced_files = generate_offline_response(

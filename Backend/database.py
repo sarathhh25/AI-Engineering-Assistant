@@ -131,7 +131,7 @@ class UserSetting(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     gemini_api_key = Column(String(255), nullable=True)
     github_token = Column(String(255), nullable=True)
-    preferred_model = Column(String(100), default="gemini-2.5-flash")
+    preferred_model = Column(String(100), default="gemini-3.6-flash")
     theme = Column(String(20), default="dark")
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -172,7 +172,7 @@ def init_db():
     """Create all tables if they don't exist."""
     try:
         Base.metadata.create_all(bind=engine)
-        print("✅ Database tables created / verified successfully.")
+        print("[OK] Database tables created / verified successfully.")
     except Exception as e:
         print(f"Warning: Could not initialize database tables: {e}")
 
