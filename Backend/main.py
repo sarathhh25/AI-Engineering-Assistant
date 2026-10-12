@@ -16,6 +16,28 @@ import asyncio
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
+# Ensure UTF-8 output encoding across Windows console environments to prevent 'charmap' codec crashes
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+def safe_log(msg: str):
+    """Safely log messages to stdout without UnicodeEncodeError on any platform or Windows code page."""
+    try:
+        print(msg)
+    except Exception:
+        try:
+            print(str(msg).encode("ascii", errors="replace").decode("ascii"))
+        except Exception:
+            pass
+
+
 # Multi-path .env resolution to load from root, Frontend, and Backend
 base_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(base_dir)
@@ -52,7 +74,7 @@ def on_startup():
     try:
         init_db()
     except Exception as e:
-        print(f"Database startup warning: {e}")
+        safe_log(f"Database startup warning: {e}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,7 +101,7 @@ def get_gemini_client(api_key: Optional[str] = None):
             http_options=types.HttpOptions(retry_options=retry_options)
         )
     except Exception as e:
-        print(f"Warning: Could not initialize Gemini Client: {e}")
+        safe_log(f"Warning: Could not initialize Gemini Client: {e}")
         return None
 
 # Request Models
@@ -598,11 +620,12 @@ _working_gemini_model: Optional[str] = None
 
 # Prioritized list of active, high-performance Gemini models
 PREFERRED_GEMINI_MODELS = [
+    "gemini-3.8-flash",
     "gemini-3.6-flash",
-    "gemini-3.7-flash",
     "gemini-flash-latest",
+    "gemini-3.7-flash",
     "gemini-3.5-flash",
-    "gemini-2.5-flash",
+    "gemini-flash-lite-latest",
     "gemini-2.5-pro",
 ]
 
@@ -752,7 +775,7 @@ async def chat_endpoint(
                 db.add(user_db_msg)
                 db.commit()
         except Exception as db_err:
-            print(f"DB Error saving user message: {db_err}")
+            safe_log(f"DB Error saving user message: {db_err}")
             db.rollback()
 
         # Run context gathering concurrently — but skip web search if not required
@@ -827,7 +850,7 @@ Guidelines:
                             referenced_files = [f.fileName for f in attached_files]
                         break
                 except Exception as gen_err:
-                    print(f"⚠️ [Gemini] Model '{model_name}' failed: {gen_err}")
+                    safe_log(f"[Gemini] Model '{model_name}' failed: {gen_err}")
                     last_err = gen_err
                     continue
 
@@ -856,10 +879,10 @@ Guidelines:
                                         referenced_files = [f.fileName for f in attached_files]
                                     break
                             except Exception as dyn_err:
-                                print(f"⚠️ [Gemini Dynamic] Model '{m_name}' failed: {dyn_err}")
+                                safe_log(f"[Gemini Dynamic] Model '{m_name}' failed: {dyn_err}")
                                 continue
                 except Exception as list_err:
-                    print(f"⚠️ [Gemini] Failed to list models: {list_err}")
+                    safe_log(f"[Gemini] Failed to list models: {list_err}")
 
         if not reply_text:
             reply_text, referenced_files = generate_offline_response(
@@ -882,7 +905,7 @@ Guidelines:
                 db.add(ai_db_msg)
                 db.commit()
         except Exception as db_err:
-            print(f"DB Error saving AI response: {db_err}")
+            safe_log(f"DB Error saving AI response: {db_err}")
             db.rollback()
 
         return {
@@ -891,7 +914,22 @@ Guidelines:
             "references": referenced_files
         }
     except Exception as e:
-        return {"reply": f"⚠️ Backend Error: {str(e)}", "status": "error", "references": []}
+        safe_log(f"Chat endpoint error: {e}")
+        try:
+            fallback_text, fallback_refs = generate_offline_response(
+                user_question=request.message,
+                current_repo=request.repo or "ai-engineering-assistant",
+                attached_files=request.files or [],
+                live_data="",
+                github_data=f"ACTIVE REPOSITORY: {request.repo or 'ai-engineering-assistant'}"
+            )
+            return {
+                "reply": fallback_text,
+                "status": "success",
+                "references": fallback_refs
+            }
+        except Exception:
+            return {"reply": "Unable to process query at this time. Please try asking again.", "status": "error", "references": []}
 
 # 4. POST /api/analyze
 @app.post("/api/analyze")
