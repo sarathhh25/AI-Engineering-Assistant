@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Sparkles, User, FileCode, CheckCircle2 } from 'lucide-react'
+import { Sparkles, User, FileCode, CheckCircle2, AlertTriangle, RefreshCw, X } from 'lucide-react'
 import { CodeBlock } from './code-block'
 import { useUserProfile } from '@/lib/use-user-profile'
 
@@ -13,10 +13,13 @@ export interface ChatMessageData {
   codeSnippets?: { language: string; filename?: string; code: string }[]
   references?: string[]
   tableData?: { headers: string[]; rows: string[][] }
+  isError?: boolean
 }
 
 interface ChatMessageProps {
   message: ChatMessageData
+  onClearMessage?: (id: string) => void
+  onRetryMessage?: (id: string) => void
 }
 
 // Formats inline markdown like **bold**, *italic*, and `code`
@@ -175,15 +178,18 @@ function renderFormattedContent(content: string) {
   })
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onClearMessage, onRetryMessage }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const user = useUserProfile()
+  const isError = !isUser && (message.isError || message.content.includes('Backend Error:') || message.content.includes('charmap'))
 
   return (
     <div
       className={`py-5 px-4 sm:px-8 flex gap-4 transition-colors ${
         isUser
           ? 'bg-transparent'
+          : isError
+          ? 'bg-destructive/5 border-y border-destructive/20'
           : 'bg-muted/30 border-y border-border/40'
       }`}
     >
@@ -201,6 +207,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
               {user.initials}
             </div>
           )
+        ) : isError ? (
+          <div className="size-8 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-white shadow-md shadow-red-500/20">
+            <AlertTriangle className="size-4" />
+          </div>
         ) : (
           <div className="size-8 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
             <Sparkles className="size-4" />
@@ -216,9 +226,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
             <span className="font-semibold text-foreground text-xs">
               {isUser ? user.name : 'AI Engineering Copilot'}
             </span>
-            {!isUser && (
+            {!isUser && !isError && (
               <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20">
                 Verified Analysis
+              </span>
+            )}
+            {!isUser && isError && (
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-destructive/10 text-destructive border border-destructive/20 font-semibold">
+                Notice
               </span>
             )}
           </div>
@@ -227,10 +242,40 @@ export function ChatMessage({ message }: ChatMessageProps) {
           )}
         </div>
 
-        {/* Text and Code Blocks */}
-        <div className="space-y-2.5 text-foreground text-[13px] leading-relaxed">
-          {renderFormattedContent(message.content)}
-        </div>
+        {/* Error Card or Formatted Text */}
+        {isError ? (
+          <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive-foreground space-y-3">
+            <div className="text-xs text-red-300 font-medium leading-relaxed">
+              {message.content.replace(/^[⚠️\s]*/, '')}
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              {onRetryMessage && (
+                <button
+                  type="button"
+                  onClick={() => onRetryMessage(message.id)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-semibold transition-all shadow-xs cursor-pointer"
+                >
+                  <RefreshCw className="size-3" />
+                  Retry Question
+                </button>
+              )}
+              {onClearMessage && (
+                <button
+                  type="button"
+                  onClick={() => onClearMessage(message.id)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-[11px] font-medium border border-border transition-all cursor-pointer"
+                >
+                  <X className="size-3" />
+                  Clear That Error
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2.5 text-foreground text-[13px] leading-relaxed">
+            {renderFormattedContent(message.content)}
+          </div>
+        )}
 
         {/* File Reference Pills */}
         {message.references && message.references.length > 0 && (

@@ -79,12 +79,82 @@ export function ChatWorkspace({
     }
     try {
       const saved = localStorage.getItem(`copilot_chat_messages_${activeChatId}`)
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed: ChatMessageData[] = JSON.parse(saved)
+        // Automatically purge any stale charmap error messages
+        const cleaned = parsed.filter((m) => !m.content?.includes("charmap' codec can't encode"))
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(`copilot_chat_messages_${activeChatId}`, JSON.stringify(cleaned))
+        }
+        return cleaned
+      }
     } catch (e) {}
     return []
   })
   const [systemStatus, setSystemStatus] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Global scan on mount to clean any cached charmap error messages across all stored chats
+  useEffect(() => {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('copilot_chat_messages_')) {
+          const raw = localStorage.getItem(key)
+          if (raw && raw.includes("charmap' codec can't encode")) {
+            const parsed = JSON.parse(raw)
+            const filtered = parsed.filter((m: any) => !m.content?.includes("charmap' codec can't encode"))
+            localStorage.setItem(key, JSON.stringify(filtered))
+          }
+        }
+      }
+    } catch (e) {}
+  }, [])
+
+  const handleClearMessage = (id: string) => {
+    setMessages((prev) => {
+      const updated = prev.filter((m) => m.id !== id)
+      if (activeChatId && activeChatId !== 'c1') {
+        try {
+          localStorage.setItem(`copilot_chat_messages_${activeChatId}`, JSON.stringify(updated))
+        } catch (e) {}
+      }
+      return updated
+    })
+  }
+
+  const handleRetryMessage = async (errorMsgId: string) => {
+    const errIdx = messages.findIndex((m) => m.id === errorMsgId)
+    if (errIdx === -1) return
+
+    let userQuery = ''
+    for (let i = errIdx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        userQuery = messages[i].content
+        break
+      }
+    }
+
+    handleClearMessage(errorMsgId)
+
+    if (userQuery) {
+      setSystemStatus('Retrying analysis with updated model engine...')
+      try {
+        const response = await apiClient.sendChatMessage(userQuery, activeRepo || 'ai-engineering-assistant', [])
+        setSystemStatus(null)
+        const aiReply: ChatMessageData = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          content: response.reply,
+          references: response.references && response.references.length > 0 ? response.references : undefined,
+        }
+        setMessages((prev) => [...prev, aiReply])
+      } catch (e) {
+        setSystemStatus(null)
+      }
+    }
+  }
 
   useEffect(() => {
     if (activeChatId && activeChatId !== 'c1' && messages.length > 0) {
@@ -277,7 +347,12 @@ Provide temporary staging registry credentials and enable Docker Buildx cache-fr
             </div>
           ) : (
             messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
+              <ChatMessage
+                key={msg.id}
+                message={msg}
+                onClearMessage={handleClearMessage}
+                onRetryMessage={handleRetryMessage}
+              />
             ))
           )}
 
