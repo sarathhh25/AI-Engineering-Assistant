@@ -5,6 +5,7 @@ import { TopNav } from '@/components/top-nav'
 import { SidebarLeft, ChatItem } from '@/components/sidebar-left'
 import { WorkspaceMain } from '@/components/workspace-main'
 import { CommandPalette } from '@/components/command-palette'
+import { apiClient } from '@/lib/api-client'
 
 const DEFAULT_CHATS: ChatItem[] = []
 
@@ -19,6 +20,7 @@ export function AppShell() {
   const [aiCredits, setAiCredits] = useState(8450)
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [chats, setChats] = useState<ChatItem[]>(DEFAULT_CHATS)
+  const [availableRepos, setAvailableRepos] = useState<Array<{ id: string; name: string; lang: string; updated: string }>>([])
 
   // Modal dialog states
   const [dialogType, setDialogType] = useState<'projects' | 'repos' | 'agents' | 'knowledge' | null>(null)
@@ -26,12 +28,23 @@ export function AppShell() {
   // Restore saved activeTab, activeProject, and activeRepo on client mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('copilot_active_tab')
-      if (saved && saved !== 'dashboard') {
-        setActiveTab(saved)
+      const urlParams = new URLSearchParams(window.location.search)
+      const queryTab = urlParams.get('tab')
+      const hasGitHubCallback = urlParams.has('github_status') || urlParams.has('github_error')
+
+      if (queryTab) {
+        setActiveTab(queryTab)
+      } else if (hasGitHubCallback) {
+        setActiveTab('integrations')
       } else {
-        setActiveTab('chat')
+        const saved = localStorage.getItem('copilot_active_tab')
+        if (saved && saved !== 'dashboard') {
+          setActiveTab(saved)
+        } else {
+          setActiveTab('chat')
+        }
       }
+
       const savedProject = localStorage.getItem('copilot_active_project')
       if (savedProject) setActiveProject(savedProject)
       const savedRepo = localStorage.getItem('copilot_active_repo')
@@ -53,6 +66,26 @@ export function AppShell() {
       localStorage.setItem('copilot_active_repo', activeRepo)
     } catch (e) {}
   }, [activeProject, activeRepo])
+
+  // Load real repositories from GitHub API when repos dialog opens
+  useEffect(() => {
+    if (dialogType === 'repos') {
+      apiClient
+        .getGitHubRepositories(1, 50)
+        .then((res) => {
+          if (res.repositories && res.repositories.length > 0) {
+            const mapped = res.repositories.map((r) => ({
+              id: r.full_name || r.name,
+              name: r.full_name || r.name,
+              lang: r.language || 'Code',
+              updated: r.private ? 'Private' : 'Public',
+            }))
+            setAvailableRepos(mapped)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [dialogType])
 
   // Helper to derive a clean, readable title from the first message
   const deriveTitleFromMessage = (text: string): string => {
@@ -307,26 +340,42 @@ export function AppShell() {
             )}
 
             {dialogType === 'repos' && (
-              <div className="space-y-2">
-                {[
-                  { id: 'ai-engineering-assistant', lang: 'TypeScript', updated: '2m ago' },
-                  { id: 'Google_maps', lang: 'Python', updated: '1h ago' },
-                  { id: 'CuriousBees', lang: 'Python', updated: '3h ago' },
-                  { id: 'Financial-Tracker', lang: 'Python', updated: '1d ago' },
-                ].map((r) => (
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {/* Local Workspace Option */}
+                <button
+                  key="ai-engineering-assistant"
+                  onClick={() => {
+                    setActiveRepo('ai-engineering-assistant')
+                    apiClient.selectGitHubRepository('ai-engineering-assistant').catch(() => {})
+                    setDialogType(null)
+                  }}
+                  className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
+                    activeRepo === 'ai-engineering-assistant' ? 'bg-primary/15 border-primary/30 text-primary font-medium' : 'bg-secondary/40 border-border text-foreground hover:bg-secondary'
+                  }`}
+                >
+                  <div>
+                    <div className="font-mono font-semibold">ai-engineering-assistant</div>
+                    <div className="text-[10px] text-muted-foreground">TypeScript / Python • Local Workspace</div>
+                  </div>
+                  {activeRepo === 'ai-engineering-assistant' && <span className="text-emerald-500 font-bold">Active</span>}
+                </button>
+
+                {/* Real Remote Repositories */}
+                {availableRepos.filter((r) => r.id !== 'ai-engineering-assistant').map((r) => (
                   <button
                     key={r.id}
                     onClick={() => {
                       setActiveRepo(r.id)
+                      apiClient.selectGitHubRepository(r.id).catch(() => {})
                       setDialogType(null)
                     }}
-                    className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between ${
+                    className={`w-full text-left p-2.5 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
                       activeRepo === r.id ? 'bg-primary/15 border-primary/30 text-primary font-medium' : 'bg-secondary/40 border-border text-foreground hover:bg-secondary'
                     }`}
                   >
                     <div>
-                      <div className="font-mono font-semibold">{r.id}</div>
-                      <div className="text-[10px] text-muted-foreground">{r.lang} • Updated {r.updated}</div>
+                      <div className="font-mono font-semibold">{r.name}</div>
+                      <div className="text-[10px] text-muted-foreground">{r.lang} • {r.updated}</div>
                     </div>
                     {activeRepo === r.id && <span className="text-emerald-500 font-bold">Active</span>}
                   </button>

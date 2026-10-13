@@ -1,16 +1,18 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   GitBranch,
   FolderGit2,
   ChevronDown,
   Search,
-  Plus,
   Check,
   Clock,
-  Sparkles
+  Lock,
+  Globe,
+  Loader2,
 } from 'lucide-react'
+import { apiClient, GitHubRepositoryItem } from '@/lib/api-client'
 
 export interface RepositorySelectorProps {
   currentRepo: string
@@ -19,14 +21,11 @@ export interface RepositorySelectorProps {
   onSelectBranch: (branch: string) => void
 }
 
-const REPOSITORIES = [
-  { id: 'ai-engineering-assistant', name: 'ai-engineering-assistant', isRecent: true, updated: '2m ago' },
-  { id: 'Google_maps', name: 'Google_maps', isRecent: true, updated: '1d ago' },
-  { id: 'CuriousBees', name: 'CuriousBees', isRecent: false, updated: '3d ago' },
-  { id: 'Financial Tracker', name: 'Financial Tracker', isRecent: false, updated: '1w ago' },
+const DEFAULT_REPOSITORIES = [
+  { id: 'ai-engineering-assistant', name: 'ai-engineering-assistant', isRecent: true, updated: 'Active' },
 ]
 
-const BRANCHES = ['main', 'develop', 'feature/ai-agent']
+const DEFAULT_BRANCHES = ['main', 'develop', 'feature/app-shell']
 
 export function RepositorySelector({
   currentRepo,
@@ -37,16 +36,63 @@ export function RepositorySelector({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'repos' | 'branches'>('repos')
+  const [githubRepos, setGithubRepos] = useState<GitHubRepositoryItem[]>([])
+  const [loading, setLoading] = useState(false)
 
-  const filteredRepos = REPOSITORIES.filter((r) =>
+  useEffect(() => {
+    // Attempt to load real repositories from backend
+    setLoading(true)
+    apiClient
+      .getGitHubRepositories(1, 50)
+      .then((res) => {
+        if (res.repositories && res.repositories.length > 0) {
+          setGithubRepos(res.repositories)
+        }
+      })
+      .catch(() => {
+        // Disconnected or offline -> keep default list
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [])
+
+  // Combine local default repos with real remote repositories
+  const combinedRepoList = [
+    ...DEFAULT_REPOSITORIES.map((r) => ({
+      id: r.id,
+      name: r.name,
+      isPrivate: false,
+      language: 'TypeScript / Python',
+    })),
+    ...githubRepos
+      .filter((r) => r.name !== 'ai-engineering-assistant' && r.full_name !== 'ai-engineering-assistant')
+      .map((r) => ({
+        id: String(r.id),
+        name: r.full_name || r.name,
+        isPrivate: r.private,
+        language: r.language || 'Code',
+      })),
+  ]
+
+  const filteredRepos = combinedRepoList.filter((r) =>
     r.name.toLowerCase().includes(search.toLowerCase())
   )
+
+  const handleSelectRepository = (name: string) => {
+    onSelectRepo(name)
+    apiClient.selectGitHubRepository(name).catch(() => {})
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('copilot_active_repo', name)
+    }
+    setOpen(false)
+  }
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800/90 border border-white/[0.08] hover:border-white/20 text-xs text-zinc-200 transition-all shadow-sm group"
+        className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800/90 border border-white/[0.08] hover:border-white/20 text-xs text-zinc-200 transition-all shadow-sm group cursor-pointer"
       >
         <FolderGit2 className="size-3.5 text-blue-400 shrink-0" />
         <span className="font-mono text-[11px] font-semibold text-zinc-200 truncate max-w-[130px]">
@@ -79,74 +125,71 @@ export function RepositorySelector({
           <div className="grid grid-cols-2 gap-1 p-0.5 bg-zinc-900 rounded-lg border border-white/5 mb-2">
             <button
               onClick={() => setTab('repos')}
-              className={`py-1 rounded-md text-[11px] font-medium transition-all ${
+              className={`py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
                 tab === 'repos' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              Repositories ({REPOSITORIES.length})
+              Repositories ({combinedRepoList.length})
             </button>
             <button
               onClick={() => setTab('branches')}
-              className={`py-1 rounded-md text-[11px] font-medium transition-all ${
+              className={`py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
                 tab === 'branches' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              Branches ({BRANCHES.length})
+              Branches ({DEFAULT_BRANCHES.length})
             </button>
           </div>
 
           {/* Content View */}
           {tab === 'repos' ? (
-            <div className="max-h-48 overflow-y-auto space-y-1">
+            <div className="max-h-56 overflow-y-auto space-y-1">
               <div className="px-2 py-1 text-[9px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center justify-between">
-                <span>Recent Repositories</span>
-                <Clock className="size-2.5" />
+                <span>Active & Remote Repos</span>
+                {loading ? <Loader2 className="size-2.5 animate-spin" /> : <Clock className="size-2.5" />}
               </div>
+
               {filteredRepos.map((repo) => (
                 <button
                   key={repo.id}
-                  onClick={() => {
-                    onSelectRepo(repo.name)
-                    setOpen(false)
-                  }}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
+                  onClick={() => handleSelectRepository(repo.name)}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                     currentRepo === repo.name
                       ? 'bg-blue-500/15 text-blue-300 font-medium border border-blue-500/20'
                       : 'text-zinc-300 hover:bg-white/[0.06]'
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <FolderGit2 className="size-3.5 text-blue-400 shrink-0" />
+                    {repo.isPrivate ? (
+                      <Lock className="size-3 text-amber-400 shrink-0" />
+                    ) : (
+                      <FolderGit2 className="size-3.5 text-blue-400 shrink-0" />
+                    )}
                     <span className="font-mono text-[11px] truncate">{repo.name}</span>
                   </div>
                   {currentRepo === repo.name && <Check className="size-3.5 text-blue-400" />}
                 </button>
               ))}
 
-              <button
-                onClick={() => {
-                  alert('Create / Import repository triggered')
-                  setOpen(false)
-                }}
-                className="w-full mt-2 flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-dashed border-white/10 hover:border-white/20 text-zinc-400 hover:text-zinc-200 text-xs transition-colors"
-              >
-                <Plus className="size-3.5 text-blue-400" />
-                <span>Import or Create Repository</span>
-              </button>
+              {filteredRepos.length === 0 && (
+                <p className="text-center text-zinc-500 py-3 text-[11px]">
+                  No repositories found
+                </p>
+              )}
             </div>
           ) : (
-            <div className="max-h-48 overflow-y-auto space-y-1">
+            <div className="max-h-56 overflow-y-auto space-y-1">
               <div className="px-2 py-1 text-[9px] font-semibold text-zinc-500 uppercase tracking-wider">
                 Select Active Branch
               </div>
-              {BRANCHES.map((b) => (
+              {DEFAULT_BRANCHES.map((b) => (
                 <button
                   key={b}
                   onClick={() => {
                     onSelectBranch(b)
                     setOpen(false)
                   }}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between font-mono text-[11px] transition-colors ${
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between font-mono text-[11px] transition-colors cursor-pointer ${
                     currentBranch === b
                       ? 'bg-emerald-500/15 text-emerald-300 font-medium border border-emerald-500/20'
                       : 'text-zinc-300 hover:bg-white/[0.06]'

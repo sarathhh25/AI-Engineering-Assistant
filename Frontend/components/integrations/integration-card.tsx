@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react'
-import { signIn, signOut } from 'next-auth/react'
 import { ConnectionStatus, ConnectionState } from './connection-status'
-import { Settings, Unplug, Sparkles, Loader2, Plus } from 'lucide-react'
+import { Settings, Unplug, Loader2, Plus, AlertCircle } from 'lucide-react'
+import { GitHubIntegrationStatus } from '@/lib/api-client'
 
 export interface IntegrationTool {
   id: string
@@ -19,7 +19,11 @@ interface IntegrationCardProps {
   onConnectClick: (tool: IntegrationTool) => void
   onDisconnectClick: (toolId: string) => void
   onOpenSettings: (tool: IntegrationTool) => void
+  onOpenSetupGuide?: () => void
+  onDismissError?: () => void
   isGithubConnected?: boolean
+  githubStatus?: GitHubIntegrationStatus | null
+  githubErrorMessage?: string | null
 }
 
 export function IntegrationCard({
@@ -27,12 +31,36 @@ export function IntegrationCard({
   onConnectClick,
   onDisconnectClick,
   onOpenSettings,
+  onOpenSetupGuide,
+  onDismissError,
   isGithubConnected = false,
+  githubStatus = null,
+  githubErrorMessage = null,
 }: IntegrationCardProps) {
   const Icon = tool.icon
   const isGitHub = tool.id === 'github'
-  const isConnected = isGitHub ? isGithubConnected : tool.status === 'Connected'
-  const isConnecting = tool.status === 'Connecting'
+
+  let effectiveStatus: ConnectionState = tool.status
+  let ghUsername = githubStatus?.username
+
+  if (isGitHub) {
+    if (githubStatus?.connected || isGithubConnected) {
+      effectiveStatus = 'Connected'
+    } else if (githubStatus?.status === 'Connecting' || tool.status === 'Connecting') {
+      effectiveStatus = 'Connecting'
+    } else if (githubErrorMessage) {
+      effectiveStatus = 'Error'
+    } else if (githubStatus && githubStatus.configured === false) {
+      effectiveStatus = 'Setup Required'
+    } else if (githubStatus?.status === 'Error') {
+      effectiveStatus = 'Error'
+    } else {
+      effectiveStatus = 'Disconnected'
+    }
+  }
+
+  const isConnected = effectiveStatus === 'Connected'
+  const isConnecting = effectiveStatus === 'Connecting'
 
   return (
     <div className="p-4 rounded-2xl bg-card border border-border hover:border-primary/40 transition-all flex flex-col justify-between space-y-4 group select-none shadow-xs">
@@ -44,10 +72,17 @@ export function IntegrationCard({
               <Icon className="size-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
-                {tool.name}
-              </h3>
-              <ConnectionStatus status={isConnected ? 'Connected' : 'Disconnected'} />
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
+                  {tool.name}
+                </h3>
+                {isGitHub && ghUsername && (
+                  <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded border border-border">
+                    @{ghUsername}
+                  </span>
+                )}
+              </div>
+              <ConnectionStatus status={effectiveStatus} />
             </div>
           </div>
         </div>
@@ -57,12 +92,55 @@ export function IntegrationCard({
           {tool.description}
         </p>
 
+        {isGitHub && githubErrorMessage && effectiveStatus === 'Error' && (
+          <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-[10px] flex flex-col gap-1.5 font-mono">
+            <div className="flex items-start justify-between gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="size-3.5 shrink-0" />
+                <span className="font-semibold text-[10px] uppercase tracking-wider">OAuth Configuration Needed</span>
+              </div>
+              {onDismissError && (
+                <button
+                  onClick={onDismissError}
+                  className="text-muted-foreground hover:text-foreground text-[10px] cursor-pointer"
+                  title="Dismiss error"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] leading-relaxed break-words font-sans">{githubErrorMessage}</p>
+            {onOpenSetupGuide && (
+              <button
+                onClick={onOpenSetupGuide}
+                className="mt-0.5 text-[10px] text-primary hover:underline text-left font-sans font-semibold cursor-pointer"
+              >
+                View OAuth setup instructions →
+              </button>
+            )}
+          </div>
+        )}
+
+        {isGitHub && !githubErrorMessage && effectiveStatus === 'Setup Required' && (
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] flex items-center justify-between font-mono">
+            <span>OAuth credentials needed in .env</span>
+            {onOpenSetupGuide && (
+              <button
+                onClick={onOpenSetupGuide}
+                className="text-primary hover:underline cursor-pointer font-sans font-semibold shrink-0 ml-1.5"
+              >
+                Setup Guide →
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Scopes Tag List */}
         <div className="flex flex-wrap gap-1 pt-1">
           {tool.scopes.map((scope) => (
             <span
               key={scope}
-              className="text-[9px] font-mono px-1.5 py-0.2 rounded-md bg-secondary text-muted-foreground border border-border"
+              className="text-[9px] font-mono px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground border border-border"
             >
               {scope}
             </span>
@@ -73,7 +151,7 @@ export function IntegrationCard({
       {/* Footer Action Buttons */}
       <div className="pt-3 border-t border-border flex items-center gap-2">
         {isGitHub ? (
-          isGithubConnected ? (
+          isConnected ? (
             <div className="flex items-center gap-2 w-full">
               <button
                 onClick={() => onOpenSettings(tool)}
@@ -84,7 +162,7 @@ export function IntegrationCard({
               </button>
 
               <button
-                onClick={() => signOut()}
+                onClick={() => onDisconnectClick(tool.id)}
                 className="py-1.5 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-medium text-xs transition-colors border border-red-500/20 flex items-center gap-1 cursor-pointer"
                 title="Disconnect GitHub"
               >
@@ -94,11 +172,31 @@ export function IntegrationCard({
             </div>
           ) : (
             <button
-              onClick={() => signIn('github')}
-              className="w-full py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary font-semibold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              onClick={() => onConnectClick(tool)}
+              disabled={isConnecting}
+              className="w-full py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary font-semibold text-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
             >
-              <Plus className="size-3.5" />
-              <span>+ Connect GitHub</span>
+              {isConnecting ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin text-primary" />
+                  <span>Connecting GitHub...</span>
+                </>
+              ) : effectiveStatus === 'Error' ? (
+                <>
+                  <Plus className="size-3.5" />
+                  <span>Retry GitHub Connection</span>
+                </>
+              ) : effectiveStatus === 'Setup Required' ? (
+                <>
+                  <Plus className="size-3.5" />
+                  <span>Connect GitHub</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="size-3.5" />
+                  <span>+ Connect GitHub</span>
+                </>
+              )}
             </button>
           )
         ) : isConnected ? (

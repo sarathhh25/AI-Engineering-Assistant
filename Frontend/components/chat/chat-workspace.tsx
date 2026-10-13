@@ -198,108 +198,12 @@ export function ChatWorkspace({
     setMessages((prev) => [...prev, userMsg])
     setSystemStatus('Analyzing repository context & pipeline telemetry...')
 
-    // Handle instant engineering queries with rich contextual analysis
-    if (text === 'Which feature is risky?') {
-      setTimeout(() => {
-        setSystemStatus(null)
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            content: `### High Risk Feature Analysis: Real-Time Vector RAG Pipeline
-Based on codebase telemetry and test coverage, **Vector RAG Ingestion Pipeline** has the highest risk score (0.84 / 1.0).
-
-**Key Risk Drivers:**
-- **Concurrency Bottleneck:** Batch vector embeddings can block the FastAPI event loop during high load.
-- **Missing Integration Tests:** Test coverage in \`lib/rag/qdrant.ts\` is currently below 45%.
-- **Dependency Lag:** Upstream Qdrant vector client has 2 breaking schema changes in v1.9.`,
-            references: ['@lib/api-client.ts', '@Backend/main.py'],
-            tableData: {
-              headers: ['Feature', 'Risk Score', 'Failure Probability', 'Primary Factor'],
-              rows: [
-                ['Vector RAG Ingestion', 'High (0.84)', '42%', 'Async event loop contention'],
-                ['FastAPI JWT Middleware', 'Medium (0.41)', '14%', 'Session expiration edge cases'],
-                ['Next.js App Shell Layout', 'Low (0.12)', '3%', 'Fully validated in CI'],
-              ],
-            },
-          },
-        ])
-      }, 500)
-      return
-    }
-
-    if (text === 'Which PR will probably fail?') {
-      setTimeout(() => {
-        setSystemStatus(null)
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            content: `### PR Failure Probability Forecast: PR #48
-**PR #48 ("Refactor database connection pool & async retry loop")** has an estimated **78% failure probability** in CI staging.
-
-**Identified Issues:**
-- Missing database migration rollback scripts for PostgreSQL session pools.
-- Timeout values are hardcoded to 5000ms, which conflicts with cloud deployment latency SLAs.
-- 4 linting warnings in \`Backend/main.py\` regarding unhandled connection drops.`,
-            references: ['@Backend/main.py', '@package.json'],
-            tableData: {
-              headers: ['PR #', 'Author', 'Branch', 'Risk Level', 'Est. Failure Prob.'],
-              rows: [
-                ['#48 Refactor DB Pool', 'Lekha', 'feature/db-pool', 'Critical', '78%'],
-                ['#44 Update Theme Tokens', 'Sarath', 'main', 'Low', '4%'],
-                ['#41 Add Route Caching', 'Kalyan', 'feature/cache', 'Medium', '29%'],
-              ],
-            },
-          },
-        ])
-      }, 500)
-      return
-    }
-
-    if (text === 'Which engineer is blocked?') {
-      setTimeout(() => {
-        setSystemStatus(null)
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            content: `### Blocked Engineer Report
-**Yashwanth** is currently blocked on **Docker Multi-stage CI Pipeline**.
-
-**Blocker Details:**
-- Waiting on AWS IAM ECR deployment credentials from DevOps team (pending 18 hours).
-- Docker image build cache invalidation bug in GitHub Actions workflow runner.
-
-**Suggested Resolution:**
-Provide temporary staging registry credentials and enable Docker Buildx cache-from layer reuse.`,
-            references: ['@requirements.txt', '@Backend/main.py'],
-            tableData: {
-              headers: ['Engineer', 'Status', 'Blocked Task', 'Duration', 'Action Needed'],
-              rows: [
-                ['Yashwanth', 'Blocked 🔴', 'Docker CI/CD Pipeline', '18 hours', 'AWS IAM Permission'],
-                ['Lekha', 'Active 🟢', 'FastAPI DB Optimization', '—', 'Code review'],
-                ['Sarath', 'Active 🟢', '2-Column Minimalist Chat Layout', '—', 'Refactor complete'],
-              ],
-            },
-          },
-        ])
-      }, 500)
-      return
-    }
-
     const attachedFilesPayload = (attachments || []).map((a) => ({
       fileName: a.fileName || a.name,
       content: a.content || '',
     }))
 
-    // Default: query FastAPI backend with text and attached files
+    // Query FastAPI backend with text and attached files
     try {
       const response = await apiClient.sendChatMessage(text, activeRepo || 'ai-engineering-assistant', attachedFilesPayload)
       setSystemStatus(null)
@@ -319,7 +223,8 @@ Provide temporary staging registry credentials and enable Docker Buildx cache-fr
         id: crypto.randomUUID(),
         role: 'assistant',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        content: `Received query for engineering workspace. Backend analysis: "${text}". All systems normal.`,
+        content: `⚠️ Connection Error: Unable to complete request with the backend server (${e.message || 'Request failed'}). Make sure the backend service is running on port 8000.`,
+        isError: true,
       }
       setMessages((prev) => [...prev, errorReply])
     }

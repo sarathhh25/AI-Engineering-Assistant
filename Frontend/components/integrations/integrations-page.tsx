@@ -1,10 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { signIn, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import {
   GitPullRequest,
-  Plug
+  Plug,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react'
 
 import { IntegrationSearch } from './integration-search'
@@ -12,7 +14,9 @@ import { IntegrationFilters, IntegrationFilterType } from './integration-filters
 import { IntegrationCard, IntegrationTool } from './integration-card'
 import { IntegrationModal } from './integration-modal'
 import { IntegrationSettingsModal } from './integration-settings-modal'
+import { GitHubSetupModal } from './github-setup-modal'
 import { ConnectionState } from './connection-status'
+import { apiClient, GitHubIntegrationStatus } from '@/lib/api-client'
 
 const INITIAL_TOOLS: IntegrationTool[] = [
   {
@@ -27,44 +31,118 @@ const INITIAL_TOOLS: IntegrationTool[] = [
 
 export function IntegrationsPage() {
   const { data: session } = useSession()
-  const isGithubConnected = !!(session as any)?.accessToken
+  const nextAuthAccessToken = (session as any)?.accessToken
+  const backendSessionToken = (session as any)?.backendToken
 
   const [tools, setTools] = useState<IntegrationTool[]>(INITIAL_TOOLS)
+  const [githubStatus, setGithubStatus] = useState<GitHubIntegrationStatus | null>(null)
+  const [githubErrorMessage, setGithubErrorMessage] = useState<string | null>(null)
+  const [successToast, setSuccessToast] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<IntegrationFilterType>('all')
   const [selectedModalTool, setSelectedModalTool] = useState<IntegrationTool | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [setupModalOpen, setSetupModalOpen] = useState(false)
   const [settingsTool, setSettingsTool] = useState<IntegrationTool | null>(null)
 
-  // Load connection states from localStorage
-  useEffect(() => {
+  // Load GitHub integration status from backend and inspect OAuth callback params
+  const refreshGitHubStatus = async () => {
     try {
-      const savedState = localStorage.getItem('copilot_integrations_v2')
-      if (savedState) {
-        const parsed: Record<string, ConnectionState> = JSON.parse(savedState)
-        setTools((prev) =>
-          prev.map((t) => (parsed[t.id] ? { ...t, status: parsed[t.id] } : t))
+      const status = await apiClient.getGitHubStatus()
+      setGithubStatus(status)
+      setTools((prev) =>
+        prev.map((t) =>
+          t.id === 'github'
+            ? { ...t, status: status.connected ? 'Connected' : 'Disconnected' }
+            : t
         )
-      }
-    } catch (e) {}
-  }, [])
-
-  const saveToolStates = (updatedTools: IntegrationTool[]) => {
-    setTools(updatedTools)
-    try {
-      const map: Record<string, ConnectionState> = {}
-      updatedTools.forEach((t) => {
-        map[t.id] = t.status
+      )
+    } catch (err: any) {
+      setGithubStatus({
+        connected: false,
+        status: 'Disconnected',
+        message: err.message,
       })
-      localStorage.setItem('copilot_integrations_v2', JSON.stringify(map))
-    } catch (e) {}
+    }
   }
 
-  const handleConnectClick = (tool: IntegrationTool) => {
+  useEffect(() => {
+    // 1. Check for URL redirect parameters from OAuth callback
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const ghStatus = params.get('github_status')
+      const ghError = params.get('github_error')
+      const ghUser = params.get('gh_user')
+
+      if (ghStatus === 'connected') {
+        setSuccessToast(`Successfully authorized and connected GitHub account ${ghUser ? `@${ghUser}` : ''}!`)
+        setGithubErrorMessage(null)
+        // Clean URL without refresh
+        const cleanUrl = window.location.pathname
+        window.history.replaceState({}, '', cleanUrl)
+      } else if (ghError) {
+        let msg = 'GitHub authorization failed.'
+        const errDesc = params.get('err_desc')
+        if (errDesc) msg = `GitHub error: ${decodeURIComponent(errDesc)}`
+        else if (ghError === 'cancelled') msg = 'GitHub authorization was cancelled or denied.'
+        else if (ghError === 'invalid_state') msg = 'Invalid OAuth security state or expired session.'
+        else if (ghError === 'missing_credentials') msg = 'GitHub OAuth credentials (GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET) are missing on the server.'
+        setGithubErrorMessage(msg)
+        const cleanUrl = window.location.pathname
+        window.history.replaceState({}, '', cleanUrl)
+      }
+    }
+
+    // Sync backend token from NextAuth session to localStorage if available
+    if (backendSessionToken && typeof window !== 'undefined') {
+      if (!localStorage.getItem('token')) localStorage.setItem('token', backendSessionToken)
+      if (!localStorage.getItem('user_token')) localStorage.setItem('user_token', backendSessionToken)
+    }
+
+    // 2. Fetch real GitHub connection status from backend
+    refreshGitHubStatus()
+
+    // 3. If NextAuth session has token, sync to backend if needed
+    if (nextAuthAccessToken) {
+      apiClient.syncGitHubToken(nextAuthAccessToken).then(() => {
+        refreshGitHubStatus()
+      }).catch(() => {})
+    }
+  }, [nextAuthAccessToken, backendSessionToken])
+
+  const handleConnectClick = async (tool: IntegrationTool) => {
     if (tool.id === 'github') {
-      signIn('github')
+      // If server explicitly reports OAuth credentials not configured, open setup guidance modal
+      if (githubStatus && githubStatus.configured === false) {
+        setSetupModalOpen(true)
+        return
+      }
+
+      setGithubErrorMessage(null)
+      setTools((prev) =>
+        prev.map((t) => (t.id === 'github' ? { ...t, status: 'Connecting' } : t))
+      )
+
+      try {
+        const returnUrl = typeof window !== 'undefined' ? `${window.location.origin}/dashboard?tab=integrations` : undefined
+        const res = await apiClient.startGitHubAuthorization(returnUrl)
+        if (res.authorization_url) {
+          window.location.href = res.authorization_url
+          return
+        }
+      } catch (err: any) {
+        setTools((prev) =>
+          prev.map((t) => (t.id === 'github' ? { ...t, status: 'Error' } : t))
+        )
+        const errMsg = err.detail || err.message || 'Unable to start GitHub authorization.'
+        setGithubErrorMessage(errMsg)
+        if (errMsg.toLowerCase().includes('configured') || errMsg.toLowerCase().includes('client_id')) {
+          setSetupModalOpen(true)
+        }
+      }
       return
     }
+
     setSelectedModalTool(tool)
     setModalOpen(true)
   }
@@ -76,38 +154,62 @@ export function IntegrationsPage() {
     setTools(updated)
 
     setTimeout(() => {
-      setTools((prev) => {
-        const finalTools = prev.map((t) =>
+      setTools((prev) =>
+        prev.map((t) =>
           t.id === toolId ? { ...t, status: 'Connected' as ConnectionState } : t
         )
-        try {
-          const map: Record<string, ConnectionState> = {}
-          finalTools.forEach((t) => {
-            map[t.id] = t.status
-          })
-          localStorage.setItem('copilot_integrations_v2', JSON.stringify(map))
-        } catch (e) {}
-        return finalTools
-      })
+      )
     }, 600)
   }
 
-  const handleDisconnect = (toolId: string) => {
-    const updated = tools.map((t) =>
-      t.id === toolId ? { ...t, status: 'Disconnected' as ConnectionState } : t
+  const handleDisconnect = async (toolId: string) => {
+    if (toolId === 'github') {
+      try {
+        await apiClient.disconnectGitHub()
+        setGithubStatus({
+          connected: false,
+          status: 'Disconnected',
+          username: null,
+          avatar_url: null,
+          selected_repo: null,
+        })
+        setTools((prev) =>
+          prev.map((t) => (t.id === 'github' ? { ...t, status: 'Disconnected' } : t))
+        )
+        setSuccessToast('GitHub account disconnected successfully.')
+      } catch (err: any) {
+        setGithubErrorMessage(`Failed to disconnect GitHub: ${err.message}`)
+      }
+      return
+    }
+
+    setTools((prev) =>
+      prev.map((t) => (t.id === toolId ? { ...t, status: 'Disconnected' } : t))
     )
-    saveToolStates(updated)
   }
 
-  const filteredTools = tools.filter((tool) => {
+  const isGithubConnected = !!githubStatus?.connected
+
+  const filteredTools = tools.map((tool) => {
+    if (tool.id === 'github') {
+      return {
+        ...tool,
+        status: isGithubConnected
+          ? ('Connected' as ConnectionState)
+          : githubErrorMessage
+          ? ('Error' as ConnectionState)
+          : tool.status,
+      }
+    }
+    return tool
+  }).filter((tool) => {
     const matchesSearch =
       tool.name.toLowerCase().includes(search.toLowerCase()) ||
       tool.description.toLowerCase().includes(search.toLowerCase())
 
     if (!matchesSearch) return false
 
-    const isConnected = tool.id === 'github' ? isGithubConnected : tool.status === 'Connected'
-
+    const isConnected = tool.status === 'Connected'
     if (filter === 'connected') return isConnected
     if (filter === 'available') return !isConnected
     return true
@@ -143,6 +245,37 @@ export function IntegrationsPage() {
         </div>
       </div>
 
+      {/* Notifications / Alerts */}
+      {successToast && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center justify-between font-medium animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="size-4 shrink-0" />
+            <span>{successToast}</span>
+          </div>
+          <button
+            onClick={() => setSuccessToast(null)}
+            className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {githubErrorMessage && (
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center justify-between font-medium animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{githubErrorMessage}</span>
+          </div>
+          <button
+            onClick={() => setGithubErrorMessage(null)}
+            className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Controls Row: Search & Filters */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <IntegrationSearch value={search} onChange={setSearch} />
@@ -161,9 +294,13 @@ export function IntegrationsPage() {
             key={tool.id}
             tool={tool}
             isGithubConnected={isGithubConnected}
+            githubStatus={githubStatus}
+            githubErrorMessage={githubErrorMessage}
             onConnectClick={handleConnectClick}
             onDisconnectClick={handleDisconnect}
             onOpenSettings={(t) => setSettingsTool(t)}
+            onOpenSetupGuide={() => setSetupModalOpen(true)}
+            onDismissError={() => setGithubErrorMessage(null)}
           />
         ))}
       </div>
@@ -176,12 +313,27 @@ export function IntegrationsPage() {
         tool={selectedModalTool}
       />
 
+      {/* GitHub OAuth Setup Guide Modal */}
+      <GitHubSetupModal
+        isOpen={setupModalOpen}
+        onClose={() => setSetupModalOpen(false)}
+        onCheckAgain={async () => {
+          await refreshGitHubStatus()
+          setSetupModalOpen(false)
+        }}
+      />
+
       {/* Settings Modal Dialog */}
       {settingsTool && (
         <IntegrationSettingsModal
           isOpen={!!settingsTool}
-          onClose={() => setSettingsTool(null)}
+          onClose={() => {
+            setSettingsTool(null)
+            refreshGitHubStatus()
+          }}
           toolName={settingsTool.name}
+          githubStatus={githubStatus}
+          onStatusChange={refreshGitHubStatus}
         />
       )}
     </div>

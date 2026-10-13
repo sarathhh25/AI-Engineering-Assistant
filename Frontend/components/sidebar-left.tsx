@@ -9,8 +9,6 @@ import {
   MessageSquare,
   FolderKanban,
   GitBranch,
-  Bot,
-  BookOpen,
   Plug,
   Settings,
   LogOut,
@@ -190,8 +188,6 @@ export function SidebarLeft({
             { id: 'chat', label: 'Chat Workspace', icon: MessageSquare, badge: chats.length.toString() },
             { id: 'projects', label: 'Projects', icon: FolderKanban },
             { id: 'repositories', label: 'Repositories', icon: GitBranch },
-            { id: 'agents', label: 'Agents', icon: Bot, badge: '8' },
-            { id: 'knowledge-base', label: 'Knowledge Base', icon: BookOpen },
           ].map((item) => {
             const isActive = currentNav === item.id
             const Icon = item.icon
