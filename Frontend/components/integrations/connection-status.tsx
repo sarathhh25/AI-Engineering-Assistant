@@ -3,7 +3,7 @@
 import React from 'react'
 import { CheckCircle2, Circle, Loader2, AlertTriangle } from 'lucide-react'
 
-export type ConnectionState = 'Connected' | 'Connecting' | 'Disconnected' | 'Error'
+export type ConnectionState = 'Connected' | 'Connecting' | 'Disconnected' | 'Error' | 'Setup Required'
 
 interface ConnectionStatusProps {
   status: ConnectionState
@@ -23,6 +23,13 @@ export function ConnectionStatus({ status }: ConnectionStatusProps) {
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-medium font-mono">
           <Loader2 className="size-3 animate-spin text-blue-400" />
           <span>Connecting...</span>
+        </div>
+      )
+    case 'Setup Required':
+      return (
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-medium font-mono">
+          <AlertTriangle className="size-3 text-amber-500" />
+          <span>Setup Required</span>
         </div>
       )
     case 'Error':

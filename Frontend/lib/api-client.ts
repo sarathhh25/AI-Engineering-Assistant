@@ -23,6 +23,37 @@ export interface GitHubRepoDetails {
   status?: string
 }
 
+export interface GitHubIntegrationStatus {
+  connected: boolean
+  status: 'Connected' | 'Disconnected' | 'Connecting' | 'Error'
+  configured?: boolean
+  username?: string | null
+  avatar_url?: string | null
+  selected_repo?: string | null
+  scopes?: string[]
+  connected_at?: string | null
+  message?: string | null
+}
+
+export interface GitHubRepositoryItem {
+  id: number
+  name: string
+  full_name: string
+  description: string
+  private: boolean
+  default_branch: string
+  html_url: string
+  language: string
+  updated_at: string
+  stars?: number
+  open_issues_count?: number
+  permissions?: {
+    admin?: boolean
+    push?: boolean
+    pull?: boolean
+  }
+}
+
 class ApiClient {
   private baseUrl: string
 
@@ -53,7 +84,23 @@ class ApiClient {
         clearTimeout(timeoutId)
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          let errorDetail = ''
+          try {
+            const errorJson = await response.json()
+            errorDetail = errorJson?.detail || errorJson?.message || errorJson?.error || ''
+          } catch {
+            // response body was not JSON
+          }
+          const message = errorDetail || `HTTP ${response.status}: ${response.statusText}`
+          const errObj: any = new Error(message)
+          errObj.status = response.status
+          errObj.detail = errorDetail
+
+          // Do not retry 4xx client errors
+          if (response.status >= 400 && response.status < 500) {
+            throw errObj
+          }
+          throw errObj
         }
 
         const data = await response.json()
@@ -61,6 +108,11 @@ class ApiClient {
       } catch (err: any) {
         clearTimeout(timeoutId)
         lastError = err
+
+        // Immediately propagate 4xx client errors
+        if (err.status && err.status >= 400 && err.status < 500) {
+          throw err
+        }
 
         if (err.name === 'AbortError') {
           lastError = new Error(`Request timed out after ${timeoutMs}ms`)
@@ -87,7 +139,7 @@ class ApiClient {
     message: string,
     repo: string = 'ai-engineering-assistant',
     files: Array<{ fileName: string; content: string }> = []
-  ): Promise<{ reply: string; status?: string; references?: string[] }> {
+  ): Promise<{ reply: string; status?: string; scope?: string; references?: string[] }> {
     try {
       const token = typeof window !== 'undefined'
         ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
@@ -162,6 +214,86 @@ class ApiClient {
         warnings: ['Ensure environment variables are loaded in .env.local'],
       }
     }
+  }
+
+  private getAuthHeaders(): Record<string, string> {
+    const token = typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
+      : null
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    return headers
+  }
+
+  async getGitHubStatus(): Promise<GitHubIntegrationStatus> {
+    try {
+      return await this.request('/api/integrations/github/status', {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+        timeoutMs: 8000,
+        retries: 1,
+      })
+    } catch (e: any) {
+      return {
+        connected: false,
+        status: 'Disconnected',
+        message: e.message,
+      }
+    }
+  }
+
+  async startGitHubAuthorization(redirectUrl?: string): Promise<{ authorization_url: string; state?: string }> {
+    const url = redirectUrl
+      ? `/api/integrations/github/authorize?redirect_url=${encodeURIComponent(redirectUrl)}`
+      : '/api/integrations/github/authorize'
+    return await this.request(url, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      timeoutMs: 10000,
+      retries: 1,
+    })
+  }
+
+  async getGitHubRepositories(page: number = 1, perPage: number = 50): Promise<{
+    repositories: GitHubRepositoryItem[]
+    total_retrieved: number
+    selected_repo?: string
+    has_next: boolean
+  }> {
+    return await this.request(`/api/integrations/github/repositories?page=${page}&per_page=${perPage}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      timeoutMs: 25000,
+      retries: 1,
+    })
+  }
+
+  async selectGitHubRepository(repo: string): Promise<{ status: string; selected_repo: string; repository?: any }> {
+    return await this.request('/api/integrations/github/select-repo', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo }),
+      timeoutMs: 15000,
+    })
+  }
+
+  async disconnectGitHub(): Promise<{ status: string; message: string }> {
+    return await this.request('/api/integrations/github/disconnect', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      timeoutMs: 10000,
+    })
+  }
+
+  async syncGitHubToken(token: string): Promise<{ status: string; username?: string }> {
+    return await this.request('/api/integrations/github/sync-token', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ token }),
+      timeoutMs: 15000,
+    })
   }
 }
 

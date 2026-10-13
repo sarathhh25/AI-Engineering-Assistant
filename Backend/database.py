@@ -37,10 +37,14 @@ if not DATABASE_URL:
         "no default credentials are provided for security reasons."
     )
 
+from sqlalchemy.pool import StaticPool
+
 # SQLite compat (kept for flexibility, though we now target PostgreSQL)
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+if DATABASE_URL.startswith("sqlite") and ":memory:" in DATABASE_URL:
+    engine = create_engine(DATABASE_URL, connect_args=connect_args, poolclass=StaticPool)
+else:
+    engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -130,12 +134,33 @@ class UserSetting(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     gemini_api_key = Column(String(255), nullable=True)
-    github_token = Column(String(255), nullable=True)
+    github_token = Column(String(255), nullable=True)  # legacy / fallback plaintext field
+    github_user_id = Column(String(100), nullable=True)
+    github_username = Column(String(100), nullable=True)
+    github_avatar_url = Column(String(500), nullable=True)
+    github_token_encrypted = Column(Text, nullable=True)  # Secure AES-encrypted token
+    github_scope = Column(String(255), nullable=True)
+    github_connected_at = Column(DateTime, nullable=True)
+    selected_repo = Column(String(255), nullable=True)
     preferred_model = Column(String(100), default="gemini-3.6-flash")
     theme = Column(String(20), default="dark")
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="settings")
+
+
+class OAuthState(Base):
+    """Secure OAuth state nonce store for CSRF protection during GitHub authorization."""
+    __tablename__ = "oauth_states"
+
+    id = Column(Integer, primary_key=True, index=True)
+    state = Column(String(128), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    redirect_url = Column(String(500), nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    user = relationship("User")
 
 
 class Repository(Base):
@@ -169,9 +194,32 @@ MessageRecord = Message
 # DB lifecycle helpers
 # ---------------------------------------------------------------------------
 def init_db():
-    """Create all tables if they don't exist."""
+    """Create all tables and ensure schema columns exist."""
+    from sqlalchemy import inspect, text
     try:
         Base.metadata.create_all(bind=engine)
+
+        # Ensure newly introduced columns exist in user_settings for existing databases
+        inspector = inspect(engine)
+        if "user_settings" in inspector.get_table_names():
+            existing_cols = {c["name"] for c in inspector.get_columns("user_settings")}
+            new_col_defs = [
+                ("github_user_id", "VARCHAR(100)"),
+                ("github_username", "VARCHAR(100)"),
+                ("github_avatar_url", "VARCHAR(500)"),
+                ("github_token_encrypted", "TEXT"),
+                ("github_scope", "VARCHAR(255)"),
+                ("github_connected_at", "TIMESTAMP"),
+                ("selected_repo", "VARCHAR(255)"),
+            ]
+            with engine.begin() as conn:
+                for col_name, col_type in new_col_defs:
+                    if col_name not in existing_cols:
+                        try:
+                            conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col_name} {col_type}"))
+                        except Exception:
+                            pass
+
         print("[OK] Database tables created / verified successfully.")
     except Exception as e:
         print(f"Warning: Could not initialize database tables: {e}")
