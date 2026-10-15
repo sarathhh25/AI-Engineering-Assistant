@@ -124,18 +124,23 @@ const AGENTS: AgentItem[] = [
   },
 ]
 
-const DEMO_STEPS: WorkflowStep[] = [
-  { id: 's1', label: 'Planning', status: 'completed', logSnippet: 'Generated task execution plan across 142 files via POST /api/agent.' },
-  { id: 's2', label: 'Analyzing', status: 'completed', logSnippet: 'Running AST parser and type checker against FastAPI backend...' },
-  { id: 's3', label: 'Executing', status: 'running', logSnippet: 'Synthesizing code modifications and refactoring imports...' },
-  { id: 's4', label: 'Validating', status: 'pending', logSnippet: 'Pending test runner verification...' },
-  { id: 's5', label: 'Completed', status: 'pending', logSnippet: 'Awaiting user approval...' },
+const DEFAULT_STEPS: WorkflowStep[] = [
+  { id: 's1', label: 'Planning', status: 'pending', logSnippet: 'Awaiting execution trigger...' },
+  { id: 's2', label: 'Analyzing', status: 'pending', logSnippet: 'Pending repository file inspection...' },
+  { id: 's3', label: 'Executing', status: 'pending', logSnippet: 'Pending agent engine synthesis...' },
+  { id: 's4', label: 'Validating', status: 'pending', logSnippet: 'Pending patch validation...' },
+  { id: 's5', label: 'Completed', status: 'pending', logSnippet: 'Pending final output generation...' },
 ]
 
-export function AgentsPage() {
+interface AgentsPageProps {
+  activeRepo?: string
+}
+
+export function AgentsPage({ activeRepo }: AgentsPageProps = {}) {
   const [agentsList, setAgentsList] = useState<AgentItem[]>(AGENTS)
   const [selectedAgent, setSelectedAgent] = useState<AgentItem>(AGENTS[0])
   const [runningAgentId, setRunningAgentId] = useState<string | null>(null)
+  const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>(DEFAULT_STEPS)
   const [activeStepIndex, setActiveStepIndex] = useState(0)
   const [showOutput, setShowOutput] = useState(false)
   const [agentOutputData, setAgentOutputData] = useState<AgentOutputData | null>(null)
@@ -151,34 +156,76 @@ export function AgentsPage() {
     setActiveStepIndex(0)
     setShowOutput(false)
 
+    const initialSteps: WorkflowStep[] = [
+      { id: 's1', label: 'Planning', status: 'running', logSnippet: `Planning ${selectedAgent.name} execution across workspace files...` },
+      { id: 's2', label: 'Analyzing', status: 'pending', logSnippet: 'Inspecting repository code and AST structures...' },
+      { id: 's3', label: 'Executing', status: 'pending', logSnippet: 'Synthesizing recommendations via backend engine...' },
+      { id: 's4', label: 'Validating', status: 'pending', logSnippet: 'Verifying findings against engineering guidelines...' },
+      { id: 's5', label: 'Completed', status: 'pending', logSnippet: 'Finalizing agent output report...' },
+    ]
+    setWorkflowSteps(initialSteps)
+
     setAgentsList((prev) =>
       prev.map((a) => (a.id === agentId ? { ...a, status: 'Running' } : a))
     )
 
-    setTimeout(() => setActiveStepIndex(1), 500)
-    setTimeout(() => setActiveStepIndex(2), 1000)
+    setTimeout(() => {
+      setActiveStepIndex(1)
+      setWorkflowSteps((prev) =>
+        prev.map((s, idx) =>
+          idx === 0 ? { ...s, status: 'completed' } : idx === 1 ? { ...s, status: 'running' } : s
+        )
+      )
+    }, 400)
 
     try {
-      const res = await apiClient.executeAgent(agentId)
+      setActiveStepIndex(2)
+      setWorkflowSteps((prev) =>
+        prev.map((s, idx) =>
+          idx < 2 ? { ...s, status: 'completed' } : idx === 2 ? { ...s, status: 'running', logSnippet: 'Executing agent logic via POST /api/agent...' } : s
+        )
+      )
 
-      setTimeout(() => setActiveStepIndex(3), 1500)
+      const res = await apiClient.executeAgent(agentId, undefined, activeRepo)
+
+      setActiveStepIndex(3)
+      setWorkflowSteps((prev) =>
+        prev.map((s, idx) =>
+          idx < 3 ? { ...s, status: 'completed' } : idx === 3 ? { ...s, status: 'running', logSnippet: `Validated ${res.findings?.length || 0} findings across ${res.files_analyzed?.length || 0} files.` } : s
+        )
+      )
+
       setTimeout(() => {
         setActiveStepIndex(4)
+        setWorkflowSteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })))
         setRunningAgentId(null)
         setAgentOutputData({
           reasoningSummary: res.summary,
-          filesAnalyzed: res.files_analyzed,
-          changesProposed: `// Modified lib/auth.ts via POST /api/agent\n+ export async function verifySessionToken(token: string) {\n+   const user = await jwt.verify(token, PUBLIC_RSA_KEY);\n+   return user;\n+ }`,
-          testsGenerated: res.tests_generated,
-          warnings: res.warnings,
+          filesAnalyzed: res.files_analyzed || [],
+          changesProposed: res.proposed_diff || 'No file modifications were proposed by this agent.',
+          testsGenerated: res.tests_generated || 'No test suites generated for this agent run.',
+          warnings: res.warnings || [],
         })
         setShowOutput(true)
         setAgentsList((prev) =>
           prev.map((a) => (a.id === agentId ? { ...a, status: 'Completed', recentExecutionsCount: a.recentExecutionsCount + 1 } : a))
         )
-      }, 2000)
-    } catch {
+      }, 500)
+    } catch (err: any) {
       setRunningAgentId(null)
+      setWorkflowSteps((prev) =>
+        prev.map((s, idx) =>
+          idx === activeStepIndex ? { ...s, status: 'pending', logSnippet: `Execution error: ${err.message || 'Operation failed'}` } : s
+        )
+      )
+      setAgentOutputData({
+        reasoningSummary: `Agent execution failed: ${err.message || 'Unable to communicate with the backend service. Ensure the server is running on port 8000.'}`,
+        filesAnalyzed: [],
+        changesProposed: 'Execution failed: No changes could be generated.',
+        testsGenerated: '',
+        warnings: [err.message || 'Network error encountered during agent execution'],
+      })
+      setShowOutput(true)
       setAgentsList((prev) =>
         prev.map((a) => (a.id === agentId ? { ...a, status: 'Idle' } : a))
       )
@@ -357,7 +404,7 @@ export function AgentsPage() {
         <AgentExecution
           agentName={selectedAgent.name}
           currentStepIndex={activeStepIndex}
-          steps={DEMO_STEPS}
+          steps={workflowSteps}
         />
       )}
 

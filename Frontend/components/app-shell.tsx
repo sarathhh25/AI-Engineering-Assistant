@@ -154,6 +154,28 @@ export function AppShell() {
         // Default to the first chat in the list if one exists
         setActiveChatId(parsedChats[0].id)
       }
+
+      // If user is authenticated, sync with backend database conversations
+      const token = typeof window !== 'undefined'
+        ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
+        : null
+      if (token) {
+        apiClient.getConversations().then((res) => {
+          if (res && res.length > 0) {
+            const backendChats: ChatItem[] = res.map((c) => ({
+              id: c.id,
+              title: c.title,
+              timestamp: 'Recently',
+              group: 'Today',
+              isPinned: false,
+            }))
+            setChats(backendChats)
+            setActiveChatId((prev) =>
+              prev && backendChats.some((b) => b.id === prev) ? prev : backendChats[0].id
+            )
+          }
+        }).catch(() => {})
+      }
     } catch (e) {
       console.error('Failed to load local storage state:', e)
     }
@@ -176,9 +198,33 @@ export function AppShell() {
       } catch (e) {}
       return updated
     })
+    if (chatId.startsWith('conv-')) {
+      apiClient.renameConversation(chatId, title).catch(() => {})
+    }
   }, [])
 
-  const handleNewChat = useCallback(() => {
+  const handleNewChat = useCallback(async () => {
+    const token = typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
+      : null
+
+    if (token) {
+      try {
+        const newConv = await apiClient.createConversation('Engineering Chat', activeRepo)
+        const newChatObj: ChatItem = {
+          id: newConv.id,
+          title: newConv.title || 'Engineering Chat',
+          timestamp: 'Just now',
+          group: 'Today',
+          isPinned: false,
+        }
+        setChats((prev) => [newChatObj, ...prev])
+        setActiveChatId(newConv.id)
+        setActiveTab('chat')
+        return
+      } catch (e) {}
+    }
+
     const newChatObj: ChatItem = {
       id: `chat-${Date.now()}`,
       title: 'Engineering Chat',
@@ -197,7 +243,7 @@ export function AppShell() {
     })
     setActiveChatId(newChatObj.id)
     setActiveTab('chat')
-  }, [])
+  }, [activeRepo])
 
   // Global Keyboard Shortcuts (⌘K, ⌘N, Escape)
   useEffect(() => {

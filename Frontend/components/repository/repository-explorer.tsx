@@ -24,12 +24,14 @@ import { apiClient, GitHubRepoDetails } from '@/lib/api-client'
 
 interface RepositoryExplorerProps {
   initialTab?: 'explorer' | 'diffs'
+  activeRepo?: string
   onSelectContextFile?: (filename: string) => void
   onSendFileToChat?: (filename: string) => void
 }
 
 export function RepositoryExplorer({
   initialTab = 'explorer',
+  activeRepo = 'ai-engineering-assistant',
   onSelectContextFile,
   onSendFileToChat,
 }: RepositoryExplorerProps) {
@@ -46,27 +48,32 @@ export function RepositoryExplorer({
 
   // GitHub Data State
   const [repoDetails, setRepoDetails] = useState<GitHubRepoDetails>({
-    name: 'ai-engineering-assistant',
-    owner: 'Sarath',
+    name: activeRepo,
+    owner: 'Local Workspace',
     branch: 'main',
-    language: 'TypeScript',
-    stars: 1240,
-    commits_count: 342,
-    open_issues_count: 8,
-    open_prs_count: 4,
+    language: 'TypeScript / Python',
+    stars: 0,
+    commits_count: 0,
+    open_issues_count: 0,
+    open_prs_count: 0,
   })
-  const [branches, setBranches] = useState<string[]>(['main', 'develop', 'feature/app-shell'])
+  const [branches, setBranches] = useState<string[]>(['main'])
   const [selectedBranch, setSelectedBranch] = useState('main')
 
   useEffect(() => {
-    apiClient.fetchGitHubRepo('ai-engineering-assistant').then((res) => {
-      setRepoDetails(res)
-      setSelectedBranch(res.branch || 'main')
+    const target = activeRepo || 'ai-engineering-assistant'
+    apiClient.fetchGitHubRepo(target).then((res) => {
+      if (res) {
+        setRepoDetails(res)
+        setSelectedBranch(res.branch || 'main')
+      }
     })
-    apiClient.fetchGitHubBranches('ai-engineering-assistant').then((bList) => {
-      setBranches(bList)
+    apiClient.fetchGitHubBranches(target).then((bList) => {
+      if (bList && bList.length > 0) {
+        setBranches(bList)
+      }
     })
-  }, [])
+  }, [activeRepo])
 
   const showToast = (msg: string) => {
     setToastMsg(msg)

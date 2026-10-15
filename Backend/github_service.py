@@ -8,6 +8,7 @@ and connection lifecycle management.
 import os
 import secrets
 import datetime
+import urllib.parse
 from typing import Optional, Dict, Any, List, Tuple
 import httpx
 from sqlalchemy.orm import Session
@@ -18,6 +19,33 @@ try:
 except ImportError:
     from database import User, UserSetting, OAuthState, Repository
     from crypto_service import encrypt_token, decrypt_token
+
+
+def is_safe_redirect_url(url: Optional[str]) -> bool:
+    """Validates that redirect destination belongs to trusted application hosts or relative paths."""
+    if not url:
+        return True
+    url_clean = url.strip()
+    if url_clean.startswith("/") and not url_clean.startswith("//"):
+        return True
+    try:
+        parsed = urllib.parse.urlparse(url_clean)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = (parsed.hostname or "").lower()
+        trusted_hosts = {"localhost", "127.0.0.1"}
+        for env_var in ["FRONTEND_URL", "NEXTAUTH_URL", "BACKEND_URL"]:
+            val = os.getenv(env_var)
+            if val:
+                try:
+                    p = urllib.parse.urlparse(val)
+                    if p.hostname:
+                        trusted_hosts.add(p.hostname.lower())
+                except Exception:
+                    pass
+        return hostname in trusted_hosts
+    except Exception:
+        return False
 
 
 GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
@@ -45,7 +73,7 @@ def get_oauth_credentials() -> Tuple[Optional[str], Optional[str], str]:
         or os.getenv("GITHUB_SECRET")
         or ""
     ).strip().strip(' "\'')
-    backend_base = (os.getenv("BACKEND_URL") or "http://10.144.212.47:8000").rstrip("/")
+    backend_base = (os.getenv("BACKEND_URL") or "http://localhost:8000").rstrip("/")
     redirect_uri = (
         os.getenv("GITHUB_REDIRECT_URI")
         or f"{backend_base}/api/integrations/github/callback"
@@ -91,11 +119,12 @@ def create_authorization_url(
             (OAuthState.expires_at < datetime.datetime.now(datetime.timezone.utc))
         ).delete(synchronize_session=False)
 
-        frontend_base = (os.getenv("FRONTEND_URL") or os.getenv("NEXTAUTH_URL") or "http://10.144.212.47:3000").rstrip("/")
+        frontend_base = (os.getenv("FRONTEND_URL") or os.getenv("NEXTAUTH_URL") or "http://localhost:3000").rstrip("/")
+        safe_target = redirect_url if (redirect_url and is_safe_redirect_url(redirect_url)) else f"{frontend_base}/dashboard?tab=integrations"
         oauth_state = OAuthState(
             state=state,
             user_id=user_id,
-            redirect_url=redirect_url or f"{frontend_base}/dashboard?tab=integrations",
+            redirect_url=safe_target,
             expires_at=expires_at,
         )
         db.add(oauth_state)
@@ -118,6 +147,12 @@ def create_authorization_url(
     }
 
 
+def _build_redirect_with_params(base_url: str, params: Dict[str, str]) -> str:
+    sep = "&" if "?" in base_url else "?"
+    query = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
+    return f"{base_url}{sep}{query}"
+
+
 async def process_oauth_callback(
     code: Optional[str],
     state: Optional[str],
@@ -129,7 +164,7 @@ async def process_oauth_callback(
     retrieves real user profile, encrypts token, and persists connection.
     Returns (success, message, redirect_destination, user_info).
     """
-    frontend_base = (os.getenv("FRONTEND_URL") or os.getenv("NEXTAUTH_URL") or "http://10.144.212.47:3000").rstrip("/")
+    frontend_base = (os.getenv("FRONTEND_URL") or os.getenv("NEXTAUTH_URL") or "http://localhost:3000").rstrip("/")
     default_redirect = f"{frontend_base}/dashboard?tab=integrations"
 
     # Handle GitHub user cancellation / error
@@ -137,7 +172,7 @@ async def process_oauth_callback(
         return (
             False,
             f"GitHub authorization was cancelled or denied: {error}",
-            f"{default_redirect}?github_error=cancelled",
+            _build_redirect_with_params(default_redirect, {"github_error": "cancelled"}),
             None,
         )
 
@@ -145,7 +180,7 @@ async def process_oauth_callback(
         return (
             False,
             "Missing authorization code or state parameter from GitHub callback.",
-            f"{default_redirect}?github_error=invalid_request",
+            _build_redirect_with_params(default_redirect, {"github_error": "invalid_request"}),
             None,
         )
 
@@ -157,7 +192,7 @@ async def process_oauth_callback(
         return (
             False,
             "Invalid or unrecognized OAuth state. Request may have expired or originated from an untrusted source.",
-            f"{default_redirect}?github_error=invalid_state",
+            _build_redirect_with_params(default_redirect, {"github_error": "invalid_state"}),
             None,
         )
 
@@ -171,7 +206,7 @@ async def process_oauth_callback(
         return (
             False,
             "OAuth state has expired. Please restart the GitHub connection flow.",
-            f"{default_redirect}?github_error=state_expired",
+            _build_redirect_with_params(default_redirect, {"github_error": "state_expired"}),
             None,
         )
 
@@ -187,7 +222,7 @@ async def process_oauth_callback(
         return (
             False,
             "Server GitHub credentials not configured.",
-            f"{redirect_target}?github_error=missing_credentials",
+            _build_redirect_with_params(redirect_target, {"github_error": "missing_credentials"}),
             None,
         )
 
@@ -215,7 +250,7 @@ async def process_oauth_callback(
                 return (
                     False,
                     f"GitHub token exchange returned HTTP {token_resp.status_code}",
-                    f"{redirect_target}?github_error=token_exchange_failed&err_desc={urllib.parse.quote(err_text)}",
+                    _build_redirect_with_params(redirect_target, {"github_error": "token_exchange_failed", "err_desc": err_text}),
                     None,
                 )
 
@@ -225,7 +260,7 @@ async def process_oauth_callback(
                 return (
                     False,
                     f"GitHub OAuth error: {err_msg}",
-                    f"{redirect_target}?github_error=token_exchange_failed&err_desc={urllib.parse.quote(err_msg)}",
+                    _build_redirect_with_params(redirect_target, {"github_error": "token_exchange_failed", "err_desc": err_msg}),
                     None,
                 )
 
@@ -234,7 +269,7 @@ async def process_oauth_callback(
                 return (
                     False,
                     "No access token returned from GitHub.",
-                    f"{redirect_target}?github_error=no_token",
+                    _build_redirect_with_params(redirect_target, {"github_error": "no_token"}),
                     None,
                 )
 
@@ -252,7 +287,7 @@ async def process_oauth_callback(
                 return (
                     False,
                     f"Failed to fetch GitHub profile (HTTP {user_resp.status_code})",
-                    f"{redirect_target}?github_error=profile_fetch_failed",
+                    _build_redirect_with_params(redirect_target, {"github_error": "profile_fetch_failed"}),
                     None,
                 )
 
@@ -262,7 +297,7 @@ async def process_oauth_callback(
         return (
             False,
             f"Network error during GitHub authorization: {exc}",
-            f"{redirect_target}?github_error=network_error",
+            _build_redirect_with_params(redirect_target, {"github_error": "network_error"}),
             None,
         )
 
@@ -366,7 +401,7 @@ async def get_github_connection_status(user: Optional[User], db: Session) -> Dic
         "configured": is_configured,
         "username": user.settings.github_username,
         "avatar_url": user.settings.github_avatar_url,
-        "selected_repo": user.settings.selected_repo or "ai-engineering-assistant",
+        "selected_repo": user.settings.selected_repo,
         "scopes": scopes,
         "connected_at": user.settings.github_connected_at.isoformat() if user.settings.github_connected_at else None,
     }
@@ -574,6 +609,7 @@ def disconnect_github_account(user: Optional[User], db: Session) -> Dict[str, An
         raise PermissionError("Authentication required to disconnect GitHub.")
 
     if user.settings:
+        user.settings.github_token = None
         user.settings.github_token_encrypted = None
         user.settings.github_username = None
         user.settings.github_user_id = None
@@ -581,7 +617,10 @@ def disconnect_github_account(user: Optional[User], db: Session) -> Dict[str, An
         user.settings.github_scope = None
         user.settings.github_connected_at = None
         user.settings.selected_repo = None
-        db.commit()
+
+    # Remove synced repositories for this user
+    db.query(Repository).filter(Repository.user_id == user.id).delete()
+    db.commit()
 
     return {
         "status": "success",

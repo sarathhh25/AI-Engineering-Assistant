@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { useUserProfile } from '@/lib/use-user-profile'
+import { apiClient } from '@/lib/api-client'
 
 export interface ChatItem {
   id: string
@@ -74,7 +75,10 @@ export function SidebarLeft({
   const profileRef = useRef<HTMLDivElement>(null)
   const userProfile = useUserProfile()
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout()
+    } catch {}
     localStorage.removeItem('token')
     localStorage.removeItem('user_token')
     localStorage.removeItem('user_profile')
@@ -118,6 +122,9 @@ export function SidebarLeft({
 
   const deleteChat = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+    if (id.startsWith('conv-')) {
+      apiClient.deleteConversation(id).catch(() => {})
+    }
     const updated = chats.filter((c) => c.id !== id)
     setChats(updated)
     if (externalActiveChatId === id && updated.length > 0) {
@@ -416,11 +423,20 @@ export function SidebarLeft({
           </div>
         )}
 
-        {/* User Profile Trigger Button */}
-        <button
-          onClick={() => setProfilePopoverOpen((prev) => !prev)}
-          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-sidebar-accent border border-transparent hover:border-sidebar-border transition-colors group cursor-pointer"
-        >
+        {/* User Profile or Sign In Button */}
+        {!userProfile.isAuthenticated ? (
+          <a
+            href="/login"
+            className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-colors shadow-xs cursor-pointer"
+          >
+            <User className="size-3.5" />
+            <span>Sign In to Copilot</span>
+          </a>
+        ) : (
+          <button
+            onClick={() => setProfilePopoverOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-sidebar-accent border border-transparent hover:border-sidebar-border transition-colors group cursor-pointer"
+          >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative shrink-0">
               <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 p-0.5 shadow-xs overflow-hidden">
@@ -447,6 +463,7 @@ export function SidebarLeft({
 
           <ChevronUp className="size-4 text-muted-foreground group-hover:text-sidebar-foreground transition-transform shrink-0" />
         </button>
+        )}
       </div>
     </aside>
   )

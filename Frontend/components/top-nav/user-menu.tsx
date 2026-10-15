@@ -30,6 +30,17 @@ export function UserMenu() {
 
   const userImage = userProfile.image
 
+  if (!userProfile.isAuthenticated) {
+    return (
+      <a
+        href="/login"
+        className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+      >
+        <span>Sign In</span>
+      </a>
+    )
+  }
+
   return (
     <div className="relative">
       <button

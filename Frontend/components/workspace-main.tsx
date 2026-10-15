@@ -45,9 +45,9 @@ export function WorkspaceMain({
             }}
           />
         ) : currentTab === 'agents' ? (
-          <AgentsPage />
+          <AgentsPage activeRepo={activeRepo} />
         ) : currentTab === 'repositories' ? (
-          <RepositoryExplorer />
+          <RepositoryExplorer activeRepo={activeRepo} />
         ) : currentTab === 'integrations' ? (
           <IntegrationsPage />
         ) : currentTab === 'settings' ? (

@@ -47,12 +47,12 @@ export interface AIRule {
 }
 
 const DEFAULT_REFERENCES: ReferenceItem[] = [
-  { id: 'ref1', name: 'app/page.tsx', type: 'file', details: 'L1 - L45', tokens: '1.2k tokens' },
-  { id: 'ref2', name: 'Backend/main.py', type: 'file', details: 'L1 - L80', tokens: '850 tokens' },
-  { id: 'ref3', name: 'authenticateUser()', type: 'function', details: 'lib/auth.ts', tokens: '340 tokens' },
-  { id: 'ref4', name: 'AppShell', type: 'class', details: 'components/app-shell.tsx', tokens: '620 tokens' },
-  { id: 'ref5', name: '#PR-42 Next.js App Shell', type: 'pr', details: 'GitHub PR', tokens: '410 tokens' },
-  { id: 'ref6', name: '#104 Fix JWT Expiration', type: 'issue', details: 'GitHub Issue', tokens: '290 tokens' },
+  { id: 'ref1', name: 'Frontend/app/page.tsx', type: 'file', details: 'L1 - L45', tokens: '1.2k tokens' },
+  { id: 'ref2', name: 'Backend/main.py', type: 'file', details: 'L1 - L180', tokens: '1.5k tokens' },
+  { id: 'ref3', name: 'Backend/database.py', type: 'file', details: 'init_db()', tokens: '720 tokens' },
+  { id: 'ref4', name: 'Frontend/lib/api-client.ts', type: 'file', details: 'apiClient', tokens: '940 tokens' },
+  { id: 'ref5', name: 'AppShell', type: 'class', details: 'Frontend/components/app-shell.tsx', tokens: '820 tokens' },
+  { id: 'ref6', name: 'github_service.py', type: 'file', details: 'OAuth Lifecycle', tokens: '610 tokens' },
 ]
 
 const DEFAULT_RULES: AIRule[] = [
@@ -71,16 +71,16 @@ const RAG_SEARCH_RESULTS = [
     source: 'FastAPI Router',
   },
   {
-    filename: 'components/app-shell.tsx',
+    filename: 'Frontend/components/app-shell.tsx',
     score: '94% match',
-    snippet: 'const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)',
-    source: 'React 19 Shell',
+    snippet: 'export function AppShell()',
+    source: 'React Workspace Shell',
   },
   {
-    filename: 'lib/auth.ts',
+    filename: 'Backend/database.py',
     score: '91% match',
-    snippet: 'export async function authenticateUser(token: string)',
-    source: 'Auth Module',
+    snippet: 'class Conversation(Base):',
+    source: 'Database Schema',
   },
 ]
 

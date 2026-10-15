@@ -15,14 +15,28 @@ def _get_encryption_key() -> bytes:
     """
     Derives a 32-byte url-safe base64 Fernet key from environment variables:
     APP_ENCRYPTION_KEY, SECRET_KEY, NEXTAUTH_SECRET, or DATABASE_URL.
+    In production environments, a dedicated encryption secret is strictly required.
     """
-    raw_secret = (
+    env = (os.getenv("NODE_ENV") or os.getenv("ENVIRONMENT") or os.getenv("ENV") or "development").lower()
+    is_production = env in ("production", "prod")
+
+    configured_secret = (
         os.getenv("APP_ENCRYPTION_KEY")
         or os.getenv("SECRET_KEY")
         or os.getenv("NEXTAUTH_SECRET")
-        or os.getenv("DATABASE_URL")
-        or "ai-engineering-assistant-fallback-dev-key-change-in-prod"
-    ).strip()
+    )
+
+    if configured_secret:
+        raw_secret = configured_secret.strip()
+    elif is_production:
+        raise RuntimeError(
+            "CRITICAL SECURITY CONFIGURATION ERROR: Production encryption key is not set. "
+            "Please configure APP_ENCRYPTION_KEY or NEXTAUTH_SECRET in your production environment variables."
+        )
+    else:
+        # Development fallback only
+        db_url = os.getenv("DATABASE_URL")
+        raw_secret = db_url.strip() if db_url else "ai-engineering-assistant-local-dev-key-2026"
 
     # Create a 32-byte digest using SHA-256
     digest = hashlib.sha256(raw_secret.encode("utf-8")).digest()

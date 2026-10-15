@@ -7,52 +7,6 @@ import { AttachedFile } from './attachment-manager'
 import { Loader2, Sparkles } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 
-const INITIAL_MESSAGES: ChatMessageData[] = [
-  {
-    id: 'm1',
-    role: 'user',
-    content: 'Analyze the authentication flow and architecture in this repository.',
-    timestamp: '10:42 AM',
-  },
-  {
-    id: 'm2',
-    role: 'assistant',
-    timestamp: '10:42 AM',
-    content: `I analyzed the authentication flow across \`ai-engineering-assistant\` and found three key architectural layers:
-
-### 1. Token Verification Middleware
-The authentication middleware extracts the JWT bearer token from HTTP authorization headers and validates it against public RSA keys.
-
-### 2. User Session Context Injection
-Once verified, user session metadata is bound directly to the active request context for downstream FastAPI route handlers.
-
-### 3. Session Persistence & Security
-Session tokens expire after 24 hours and refresh keys are persisted in Redis cache memory.`,
-    references: ['@Backend/main.py', '@app/providers.tsx', '@lib/utils.ts'],
-    tableData: {
-      headers: ['Endpoint', 'Auth Method', 'Token Expiry', 'Security Level'],
-      rows: [
-        ['/api/chat', 'Bearer JWT', '24 Hours', 'High'],
-        ['/api/health', 'Public', 'N/A', 'Low'],
-        ['/api/admin', 'RSA Dual-Factor', '1 Hour', 'Critical'],
-      ],
-    },
-    codeSnippets: [
-      {
-        language: 'typescript',
-        filename: 'lib/auth.ts',
-        code: `export async function authenticateUser(token: string) {
-  const user = await verifyToken(token)
-  if (!user) {
-    throw new Error('Unauthorized session token')
-  }
-  return user
-}`,
-      },
-    ],
-  },
-]
-
 interface ChatWorkspaceProps {
   activeChatId?: string | null
   activeProject?: string
@@ -70,29 +24,67 @@ export function ChatWorkspace({
   onOpenSettings,
   onUpdateChatTitle,
 }: ChatWorkspaceProps) {
-  const [messages, setMessages] = useState<ChatMessageData[]>(() => {
+  const [messages, setMessages] = useState<ChatMessageData[]>([])
+  const [systemStatus, setSystemStatus] = useState<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Load messages whenever activeChatId changes
+  useEffect(() => {
     if (!activeChatId) {
-      return []
+      setMessages([])
+      return
     }
-    if (activeChatId === 'c1') {
-      return INITIAL_MESSAGES
+
+    let isMounted = true
+
+    // Attempt to load from backend if authenticated
+    const token = typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
+      : null
+
+    if (token && activeChatId.startsWith('conv-')) {
+      apiClient
+        .getConversation(activeChatId)
+        .then((conv) => {
+          if (!isMounted) return
+          if (conv && Array.isArray(conv.messages)) {
+            const mapped: ChatMessageData[] = conv.messages.map((m) => ({
+              id: m.id,
+              role: m.sender as 'user' | 'assistant',
+              content: m.content,
+              timestamp: m.timestamp || 'Recently',
+              references: m.references,
+            }))
+            setMessages(mapped)
+            try {
+              localStorage.setItem(`copilot_chat_messages_${activeChatId}`, JSON.stringify(mapped))
+            } catch (e) {}
+            return
+          }
+        })
+        .catch(() => {
+          // Fall back to local storage if backend request fails
+        })
     }
+
+    // LocalStorage fallback for guests or offline mode
     try {
       const saved = localStorage.getItem(`copilot_chat_messages_${activeChatId}`)
       if (saved) {
         const parsed: ChatMessageData[] = JSON.parse(saved)
-        // Automatically purge any stale charmap error messages
         const cleaned = parsed.filter((m) => !m.content?.includes("charmap' codec can't encode"))
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(`copilot_chat_messages_${activeChatId}`, JSON.stringify(cleaned))
-        }
-        return cleaned
+        setMessages(cleaned)
+      } else {
+        setMessages([])
       }
-    } catch (e) {}
-    return []
-  })
-  const [systemStatus, setSystemStatus] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+    } catch (e) {
+      setMessages([])
+    }
+
+    return () => {
+      isMounted = false
+    }
+  }, [activeChatId])
 
   // Global scan on mount to clean any cached charmap error messages across all stored chats
   useEffect(() => {
@@ -114,7 +106,7 @@ export function ChatWorkspace({
   const handleClearMessage = (id: string) => {
     setMessages((prev) => {
       const updated = prev.filter((m) => m.id !== id)
-      if (activeChatId && activeChatId !== 'c1') {
+      if (activeChatId) {
         try {
           localStorage.setItem(`copilot_chat_messages_${activeChatId}`, JSON.stringify(updated))
         } catch (e) {}
@@ -140,7 +132,12 @@ export function ChatWorkspace({
     if (userQuery) {
       setSystemStatus('Retrying analysis with updated model engine...')
       try {
-        const response = await apiClient.sendChatMessage(userQuery, activeRepo || 'ai-engineering-assistant', [])
+        const response = await apiClient.sendChatMessage(
+          userQuery,
+          activeRepo || 'ai-engineering-assistant',
+          [],
+          activeChatId || undefined
+        )
         setSystemStatus(null)
         const aiReply: ChatMessageData = {
           id: crypto.randomUUID(),
@@ -157,7 +154,7 @@ export function ChatWorkspace({
   }
 
   useEffect(() => {
-    if (activeChatId && activeChatId !== 'c1' && messages.length > 0) {
+    if (activeChatId && messages.length > 0) {
       try {
         localStorage.setItem(`copilot_chat_messages_${activeChatId}`, JSON.stringify(messages))
       } catch (e) {}
@@ -191,7 +188,11 @@ export function ChatWorkspace({
         .trim()
       if (cleanTitle) {
         const formatted = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1)
-        onUpdateChatTitle(activeChatId, formatted.length > 32 ? formatted.substring(0, 30) + '...' : formatted)
+        const finalTitle = formatted.length > 32 ? formatted.substring(0, 30) + '...' : formatted
+        onUpdateChatTitle(activeChatId, finalTitle)
+        if (activeChatId.startsWith('conv-')) {
+          apiClient.renameConversation(activeChatId, finalTitle).catch(() => {})
+        }
       }
     }
 
@@ -203,9 +204,14 @@ export function ChatWorkspace({
       content: a.content || '',
     }))
 
-    // Query FastAPI backend with text and attached files
+    // Query FastAPI backend with text, attached files, and active conversation ID
     try {
-      const response = await apiClient.sendChatMessage(text, activeRepo || 'ai-engineering-assistant', attachedFilesPayload)
+      const response = await apiClient.sendChatMessage(
+        text,
+        activeRepo || 'ai-engineering-assistant',
+        attachedFilesPayload,
+        activeChatId || undefined
+      )
       setSystemStatus(null)
 
       const aiReply: ChatMessageData = {
@@ -232,6 +238,25 @@ export function ChatWorkspace({
 
   return (
     <div className="flex-1 h-full min-w-0 bg-background flex flex-col justify-between overflow-hidden relative">
+      {/* Active Target Repository Indicator Bar */}
+      <div className="px-4 py-2 border-b border-border bg-card/60 flex items-center justify-between text-xs font-mono shrink-0 select-none">
+        <div className="flex items-center gap-2 truncate">
+          <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-muted-foreground font-sans text-[11px]">Active Repository:</span>
+          <span className="font-semibold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 text-[11px] truncate">
+            {activeRepo || 'No repository selected'}
+          </span>
+        </div>
+        {onOpenProjects && (
+          <button
+            onClick={onOpenProjects}
+            className="text-[11px] text-muted-foreground hover:text-foreground hover:underline cursor-pointer font-sans font-medium"
+          >
+            Switch Repository →
+          </button>
+        )}
+      </div>
+
       {/* 1. Message Stream Area */}
       <div
         ref={scrollRef}

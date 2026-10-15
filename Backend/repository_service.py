@@ -315,7 +315,35 @@ def retrieve_repository_evidence(
             references.append(f"@{fname}")
 
     evidence_text = "\n\n".join(evidence_blocks)
-    has_sufficient_context = bool(evidence_blocks or all_files)
+
+    # Determine technical sufficiency of retrieved evidence
+    if attached_files and len(attached_files) > 0:
+        has_sufficient_context = True
+    else:
+        # Check if query is asking a broad project-level question (architecture, overview, dependencies)
+        broad_keywords = ["architecture", "overview", "technologies used", "dependencies", "tech stack", "summary of the project", "what does this project do", "explain the codebase", "explain the project"]
+        is_broad = any(bk in clean_q for bk in broad_keywords)
+        
+        has_targeted = bool(targeted_files if is_local else targeted)
+        
+        # Check if non-generic query keywords actually appear in retrieved evidence
+        stopwords = {
+            "where", "which", "what", "how", "does", "this", "that", "from", "with",
+            "implemented", "module", "function", "feature", "component", "about", "have",
+            "there", "project", "repo", "repository", "code", "codebase", "implementation",
+            "application", "file", "files", "using", "used", "make", "show", "tell"
+        }
+        query_words = [w for w in re.findall(r"\b[a-zA-Z]{4,}\b", clean_q) if w not in stopwords]
+        matching_words = [w for w in query_words if w in evidence_text.lower()]
+        
+        if has_targeted:
+            has_sufficient_context = True
+        elif is_broad and bool(evidence_blocks):
+            has_sufficient_context = True
+        elif len(matching_words) > 0:
+            has_sufficient_context = True
+        else:
+            has_sufficient_context = False
 
     return {
         "repo_name": repo_name,
