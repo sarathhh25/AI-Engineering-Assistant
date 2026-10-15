@@ -17,6 +17,7 @@ import { IntegrationSettingsModal } from './integration-settings-modal'
 import { GitHubSetupModal } from './github-setup-modal'
 import { ConnectionState } from './connection-status'
 import { apiClient, GitHubIntegrationStatus } from '@/lib/api-client'
+import { useUserProfile } from '@/lib/use-user-profile'
 
 const INITIAL_TOOLS: IntegrationTool[] = [
   {
@@ -31,6 +32,7 @@ const INITIAL_TOOLS: IntegrationTool[] = [
 
 export function IntegrationsPage() {
   const { data: session } = useSession()
+  const userProfile = useUserProfile()
   const nextAuthAccessToken = (session as any)?.accessToken
   const backendSessionToken = (session as any)?.backendToken
 
@@ -93,10 +95,9 @@ export function IntegrationsPage() {
       }
     }
 
-    // Sync backend token from NextAuth session to localStorage if available
-    if (backendSessionToken && typeof window !== 'undefined') {
-      if (!localStorage.getItem('token')) localStorage.setItem('token', backendSessionToken)
-      if (!localStorage.getItem('user_token')) localStorage.setItem('user_token', backendSessionToken)
+    // Sync backend token from NextAuth session to apiClient and localStorage
+    if (backendSessionToken) {
+      apiClient.setToken(backendSessionToken)
     }
 
     // 2. Fetch real GitHub connection status from backend
@@ -112,6 +113,12 @@ export function IntegrationsPage() {
 
   const handleConnectClick = async (tool: IntegrationTool) => {
     if (tool.id === 'github') {
+      // Require authenticated application user
+      if (!userProfile.isAuthenticated) {
+        setGithubErrorMessage('Authentication required. Please log in before connecting your GitHub account.')
+        return
+      }
+
       // If server explicitly reports OAuth credentials not configured, open setup guidance modal
       if (githubStatus && githubStatus.configured === false) {
         setSetupModalOpen(true)
@@ -246,6 +253,21 @@ export function IntegrationsPage() {
       </div>
 
       {/* Notifications / Alerts */}
+      {!userProfile.isAuthenticated && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-medium animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>You are currently not signed in. Please log in before connecting your GitHub account.</span>
+          </div>
+          <a
+            href="/login"
+            className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs transition-colors hover:bg-primary/90 shrink-0 text-center"
+          >
+            Log In Now →
+          </a>
+        </div>
+      )}
+
       {successToast && (
         <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center justify-between font-medium animate-in fade-in">
           <div className="flex items-center gap-2">

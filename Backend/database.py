@@ -32,14 +32,19 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL is not set. Configure it via environment variable / .env - "
-        "no default credentials are provided for security reasons."
-    )
+    env = (os.getenv("NODE_ENV") or os.getenv("ENVIRONMENT") or "development").lower()
+    if env in ("production", "prod"):
+        raise RuntimeError(
+            "CRITICAL CONFIGURATION ERROR: DATABASE_URL is not set in production. "
+            "Please configure DATABASE_URL via environment variable / .env."
+        )
+    # Default local SQLite database file in the repository root for zero-config dev
+    sqlite_path = os.path.join(root_dir, "copilot_db.db").replace("\\", "/")
+    DATABASE_URL = f"sqlite:///{sqlite_path}"
 
 from sqlalchemy.pool import StaticPool
 
-# SQLite compat (kept for flexibility, though we now target PostgreSQL)
+# SQLite compat
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 if DATABASE_URL.startswith("sqlite") and ":memory:" in DATABASE_URL:
     engine = create_engine(DATABASE_URL, connect_args=connect_args, poolclass=StaticPool)
@@ -108,7 +113,7 @@ class ChatSession(Base):
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     user = relationship("User", back_populates="chat_sessions")
-    messages = relationship("Message", back_populates="chat_session", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="chat_session", cascade="all, delete-orphan", order_by="Message.created_at")
 
 
 class Message(Base):
@@ -199,26 +204,41 @@ def init_db():
     try:
         Base.metadata.create_all(bind=engine)
 
-        # Ensure newly introduced columns exist in user_settings for existing databases
+        # Ensure newly introduced columns exist for existing databases
         inspector = inspect(engine)
-        if "user_settings" in inspector.get_table_names():
-            existing_cols = {c["name"] for c in inspector.get_columns("user_settings")}
-            new_col_defs = [
-                ("github_user_id", "VARCHAR(100)"),
-                ("github_username", "VARCHAR(100)"),
-                ("github_avatar_url", "VARCHAR(500)"),
-                ("github_token_encrypted", "TEXT"),
-                ("github_scope", "VARCHAR(255)"),
-                ("github_connected_at", "TIMESTAMP"),
-                ("selected_repo", "VARCHAR(255)"),
-            ]
-            with engine.begin() as conn:
+        table_names = inspector.get_table_names()
+
+        with engine.begin() as conn:
+            if "user_settings" in table_names:
+                existing_cols = {c["name"] for c in inspector.get_columns("user_settings")}
+                new_col_defs = [
+                    ("github_user_id", "VARCHAR(100)"),
+                    ("github_username", "VARCHAR(100)"),
+                    ("github_avatar_url", "VARCHAR(500)"),
+                    ("github_token_encrypted", "TEXT"),
+                    ("github_scope", "VARCHAR(255)"),
+                    ("github_connected_at", "TIMESTAMP"),
+                    ("selected_repo", "VARCHAR(255)"),
+                ]
                 for col_name, col_type in new_col_defs:
                     if col_name not in existing_cols:
                         try:
                             conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col_name} {col_type}"))
                         except Exception:
                             pass
+
+            if "chat_sessions" in table_names:
+                existing_cols = {c["name"] for c in inspector.get_columns("chat_sessions")}
+                if "repo_name" not in existing_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN repo_name VARCHAR(255)"))
+                    except Exception:
+                        pass
+                if "is_active" not in existing_cols:
+                    try:
+                        conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN is_active BOOLEAN DEFAULT TRUE"))
+                    except Exception:
+                        pass
 
         print("[OK] Database tables created / verified successfully.")
     except Exception as e:

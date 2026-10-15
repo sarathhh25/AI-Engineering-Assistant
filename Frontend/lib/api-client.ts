@@ -8,11 +8,23 @@ export function resolveApiBaseUrl(): string {
   if (typeof window !== 'undefined' && window.location.hostname) {
     const hostname = window.location.hostname
     const protocol = window.location.protocol || 'http:'
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return `${protocol}//${hostname}:8000`
+    const envUrl = process.env.NEXT_PUBLIC_API_URL
+    if (envUrl && !envUrl.includes('10.144.212.47')) {
+      if ((hostname === 'localhost' || hostname === '127.0.0.1') && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+        return envUrl.replace(/\/$/, '')
+      }
+      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        return `${protocol}//${hostname}:8000`
+      }
+      return envUrl.replace(/\/$/, '')
     }
+    return `${protocol}//${hostname}:8000`
   }
-  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+  const envUrl = process.env.NEXT_PUBLIC_API_URL
+  if (envUrl && !envUrl.includes('10.144.212.47')) {
+    return envUrl.replace(/\/$/, '')
+  }
+  return 'http://127.0.0.1:8000'
 }
 
 const API_BASE_URL = resolveApiBaseUrl()
@@ -67,9 +79,46 @@ export interface GitHubRepositoryItem {
 
 class ApiClient {
   private baseUrl: string
+  private cachedToken: string | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
+  }
+
+  setToken(token: string | null): void {
+    this.cachedToken = token
+    if (typeof window !== 'undefined') {
+      if (token) {
+        localStorage.setItem('token', token)
+        localStorage.setItem('user_token', token)
+      } else {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user_token')
+      }
+    }
+  }
+
+  async ensureToken(): Promise<string | null> {
+    if (this.cachedToken) return this.cachedToken
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem('token') || localStorage.getItem('user_token')
+      if (local) {
+        this.cachedToken = local
+        return local
+      }
+      try {
+        const { getSession } = await import('next-auth/react')
+        const session: any = await getSession()
+        const sessionToken = session?.backendToken || session?.user?.backendToken
+        if (sessionToken) {
+          this.setToken(sessionToken)
+          return sessionToken
+        }
+      } catch {
+        // NextAuth session lookup fallback
+      }
+    }
+    return null
   }
 
   private getEffectiveBaseUrl(): string {
@@ -79,6 +128,20 @@ class ApiClient {
   private async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const { timeoutMs = 10000, retries = 2, ...fetchOptions } = options
     const url = `${this.getEffectiveBaseUrl()}${endpoint}`
+
+    // Automatically resolve backend auth token if not already in headers
+    if (typeof window !== 'undefined') {
+      const headersObj = (fetchOptions.headers || {}) as Record<string, string>
+      if (!headersObj['Authorization']) {
+        const token = await this.ensureToken()
+        if (token) {
+          fetchOptions.headers = {
+            ...headersObj,
+            'Authorization': `Bearer ${token}`,
+          }
+        }
+      }
+    }
 
     let lastError: Error | null = null
 
@@ -99,6 +162,14 @@ class ApiClient {
         clearTimeout(timeoutId)
 
         if (!response.ok) {
+          if (response.status === 401) {
+            this.setToken(null)
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('token')
+              localStorage.removeItem('user_token')
+            }
+          }
+
           let errorDetail = ''
           try {
             const errorJson = await response.json()
@@ -152,22 +223,15 @@ class ApiClient {
 
   async sendChatMessage(
     message: string,
-    repo: string = 'ai-engineering-assistant',
-    files: Array<{ fileName: string; content: string }> = []
-  ): Promise<{ reply: string; status?: string; scope?: string; references?: string[] }> {
+    repo?: string,
+    files: Array<{ fileName: string; content: string }> = [],
+    conversationId?: string
+  ): Promise<{ reply: string; status?: string; scope?: string; references?: string[]; conversation_id?: string }> {
     try {
-      const token = typeof window !== 'undefined'
-        ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
-        : null
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-      }
-
       return await this.request('/api/chat', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ message, repo, files }),
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ message, repo: repo || undefined, files, conversation_id: conversationId }),
         timeoutMs: 40000,
         retries: 1,
       })
@@ -184,18 +248,21 @@ class ApiClient {
     try {
       return await this.request('/api/github/repository', {
         method: 'POST',
+        headers: this.getAuthHeaders(),
         body: JSON.stringify({ repo }),
+        timeoutMs: 15000,
       })
-    } catch (e) {
+    } catch (e: any) {
       return {
         name: repo,
-        owner: 'Sarath',
+        owner: 'Local Workspace',
         branch: 'main',
-        language: 'TypeScript',
-        stars: 1240,
-        commits_count: 342,
-        open_issues_count: 8,
-        open_prs_count: 4,
+        language: 'TypeScript / Python',
+        stars: 0,
+        commits_count: 0,
+        open_issues_count: 0,
+        open_prs_count: 0,
+        status: 'disconnected',
       }
     }
   }
@@ -204,29 +271,119 @@ class ApiClient {
     try {
       const res = await this.request<{ branches: string[] }>('/api/github/branches', {
         method: 'POST',
+        headers: this.getAuthHeaders(),
         body: JSON.stringify({ repo }),
+        timeoutMs: 15000,
       })
-      return res.branches
+      return res.branches || ['main']
     } catch (e) {
-      return ['main', 'develop', 'feature/app-shell']
+      return ['main']
     }
   }
 
-  async executeAgent(agentId: string, prompt?: string): Promise<{ agent_id: string; status: string; summary: string; files_analyzed: string[]; tests_generated: string; warnings: string[] }> {
+  async executeAgent(
+    agentId: string,
+    prompt?: string,
+    repo?: string
+  ): Promise<{
+    agent_id: string
+    status: string
+    summary: string
+    files_analyzed: string[]
+    findings?: Array<{ file: string; line?: number; severity: string; message: string }>
+    proposed_diff?: string
+    tests_generated?: string
+    warnings: string[]
+  }> {
+    return await this.request('/api/agent', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ agent_id: agentId, prompt, repo }),
+      timeoutMs: 35000,
+      retries: 0,
+    })
+  }
+
+  async getConversations(): Promise<Array<{
+    id: string
+    title: string
+    repo_name: string
+    message_count: number
+    created_at?: string
+    updated_at?: string
+  }>> {
+    return await this.request('/api/conversations', {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      timeoutMs: 10000,
+      retries: 1,
+    })
+  }
+
+  async createConversation(title?: string, repoName?: string): Promise<{
+    id: string
+    title: string
+    repo_name: string
+  }> {
+    return await this.request('/api/conversations', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ title, repo_name: repoName }),
+      timeoutMs: 10000,
+    })
+  }
+
+  async getConversation(id: string): Promise<{
+    id: string
+    title: string
+    repo_name: string
+    messages: Array<{
+      id: string
+      sender: 'user' | 'assistant'
+      content: string
+      timestamp: string
+      references?: string[]
+    }>
+  }> {
+    return await this.request(`/api/conversations/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      timeoutMs: 10000,
+    })
+  }
+
+  async renameConversation(id: string, title: string): Promise<{ id: string; title: string }> {
+    return await this.request(`/api/conversations/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ title }),
+      timeoutMs: 10000,
+    })
+  }
+
+  async deleteConversation(id: string): Promise<{ status: string }> {
+    return await this.request(`/api/conversations/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(),
+      timeoutMs: 10000,
+    })
+  }
+
+  async logout(): Promise<void> {
     try {
-      return await this.request('/api/agent', {
+      await this.request('/api/auth/logout', {
         method: 'POST',
-        body: JSON.stringify({ agent_id: agentId, prompt }),
-        timeoutMs: 20000,
+        headers: this.getAuthHeaders(),
+        timeoutMs: 5000,
       })
-    } catch (e) {
-      return {
-        agent_id: agentId,
-        status: 'Completed',
-        summary: `Executed agent ${agentId} across workspace files. Isolated 0 critical vulnerabilities and generated unit test coverage.`,
-        files_analyzed: ['lib/auth.ts', 'components/app-shell.tsx', 'Backend/main.py'],
-        tests_generated: "describe('Backend API', () => { it('returns 200 OK', () => expect(true).toBe(true)); });",
-        warnings: ['Ensure environment variables are loaded in .env.local'],
+    } catch {
+      // Continue cleanup even if server is unreachable
+    } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user_token')
+        localStorage.removeItem('user_profile')
+        localStorage.removeItem('user')
       }
     }
   }
@@ -251,18 +408,30 @@ class ApiClient {
         retries: 1,
       })
     } catch (e: any) {
+      const msg = e?.message || ''
+      const isTimeout = msg.toLowerCase().includes('timed out') || e?.name === 'AbortError'
+      const isNetwork = msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network request failed')
       return {
         connected: false,
-        status: 'Disconnected',
-        message: e.message,
+        status: (isTimeout || isNetwork) ? 'Error' : 'Disconnected',
+        message: isTimeout
+          ? 'Backend connection timed out after 8000ms. Please check if the FastAPI backend service is responding on port 8000.'
+          : isNetwork
+          ? 'Backend service unreachable. Please ensure the backend server is running on http://127.0.0.1:8000.'
+          : (msg || 'Failed to retrieve GitHub connection status.'),
       }
     }
   }
 
   async startGitHubAuthorization(redirectUrl?: string): Promise<{ authorization_url: string; state?: string }> {
-    const url = redirectUrl
-      ? `/api/integrations/github/authorize?redirect_url=${encodeURIComponent(redirectUrl)}`
-      : '/api/integrations/github/authorize'
+    const token = await this.ensureToken()
+    let url = '/api/integrations/github/authorize'
+    const query = new URLSearchParams()
+    if (redirectUrl) query.set('redirect_url', redirectUrl)
+    if (token) query.set('token', token)
+    const qs = query.toString()
+    if (qs) url += `?${qs}`
+
     return await this.request(url, {
       method: 'GET',
       headers: this.getAuthHeaders(),

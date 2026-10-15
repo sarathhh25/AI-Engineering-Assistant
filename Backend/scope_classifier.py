@@ -17,10 +17,7 @@ class ScopeDecision(str, Enum):
 
 
 # Standardized Refusal and Notification Messages across the application
-STANDARD_REFUSAL_MESSAGE = (
-    "Sorry, I’m unable to answer that question because it is outside the scope of the connected GitHub repository. "
-    "I can help with this project's code, architecture, dependencies, APIs, bugs, and implementation."
-)
+STANDARD_REFUSAL_MESSAGE = "Sorry i was not able to provide answers."
 
 STANDARD_CLARIFICATION_MESSAGE = (
     "Could you clarify which component, file, feature, or error in this repository you are referring to?"
@@ -35,12 +32,11 @@ STANDARD_ACCESS_ERROR_MESSAGE = (
 )
 
 STANDARD_INSUFFICIENT_CONTEXT_MESSAGE = (
-    "The available repository files and documentation do not provide enough evidence to answer this accurately. "
-    "Please attach relevant files or specify the module to inspect."
+    "I could not verify this from the selected repository's available files."
 )
 
 
-# Direct Out-Of-Scope Patterns (General definitions, trivia, jokes, poems, external learning)
+# Direct Out-Of-Scope Patterns (General definitions, trivia, jokes, poems, weather, sports, news)
 _OUT_OF_SCOPE_REGEXES = [
     # General language/concept definitions without repository context ("What is Python?", "Define SQL", "Explain quantum mechanics")
     re.compile(
@@ -62,7 +58,14 @@ _OUT_OF_SCOPE_REGEXES = [
     re.compile(
         r"\b(?:prime\s+minister|president\s+of|capital\s+of|who\s+won\s+the|"
         r"current\s+weather|weather\s+today|weather\s+in|forecast\s+for|"
-        r"stock\s+price\s+of|highest\s+mountain|distance\s+to\s+the\s+moon|speed\s+of\s+light)\b",
+        r"stock\s+price\s+of|highest\s+mountain|distance\s+to\s+the\s+moon|speed\s+of\s+light|"
+        r"photosynthesis|how\s+many\s+planets|who\s+discovered)\b",
+        re.IGNORECASE
+    ),
+    # Sports, News, Current Events
+    re.compile(
+        r"\b(?:latest\s+news|today's\s+news|election\s+results|who\s+won\s+the\s+(?:super\s+bowl|world\s+cup|champions\s+league|nba|olympics|ipl)|"
+        r"cricket\s+score|football\s+score|nba\s+score)\b",
         re.IGNORECASE
     ),
     # Creative writing, entertainment, chit-chat ("Tell me a joke", "Write a poem", "Sing a song")
@@ -72,6 +75,18 @@ _OUT_OF_SCOPE_REGEXES = [
         re.IGNORECASE
     ),
 ]
+
+# Strict Prompt-Injection and Jailbreak Bypass Detection
+_PROMPT_INJECTION_REGEX = re.compile(
+    r"(?i)\b(?:ignore\s+(?:all\s+)?(?:previous|prior|above|system)\s+instructions|"
+    r"disregard\s+(?:all\s+)?(?:previous|prior|above|system)\s+(?:instructions|prompts?)|"
+    r"bypass\s+(?:all\s+)?(?:restrictions|safety|rules|filters?)|"
+    r"jailbreak|act\s+as\s+dan|you\s+are\s+now\s+(?:an?\s+)?unrestricted|"
+    r"forget\s+(?:all\s+)?(?:rules|instructions|constraints)|"
+    r"new\s+system\s+(?:prompt|instructions?)|"
+    r"override\s+(?:system|safety|restrictions)|"
+    r"pretend\s+(?:you\s+have\s+no\s+rules|to\s+be\s+unrestricted))\b"
+)
 
 # Explicit In-Scope Indicators (Questions that directly reference the project/repository)
 _IN_SCOPE_KEYWORDS = [
@@ -88,6 +103,12 @@ _IN_SCOPE_KEYWORDS = [
     "how is python used in this", "where does this project use python",
     "how does this project use", "where is python used",
     "sqlalchemy configuration", "fix this repository", "bugs in the current implementation",
+    "find a bug in its backend", "explain its authentication flow",
+    "suggest improvements to its database", "generate tests for a function in the selected repository",
+    "how two components in the selected repository interact",
+    "inspect codebase", "codebase structure", "inspect code", "review code", "code review",
+    "audit codebase", "scan code", "inspect codebase structure", "review codebase structure",
+    "architecture of this repository", "architecture of this project",
 ]
 
 # Ambiguity Patterns that need clarification unless context/files are present
@@ -97,6 +118,38 @@ _AMBIGUOUS_PATTERNS = [
     re.compile(r"^(?:is\s+this\s+secure|is\s+it\s+secure)\s*[\?\.\!]*$", re.IGNORECASE),
     re.compile(r"^(?:can\s+you\s+fix\s+it|fix\s+this|what\s+is\s+wrong\s+with\s+this)\s*[\?\.\!]*$", re.IGNORECASE),
 ]
+
+
+def _mentions_different_repo(clean_q: str, repo_name: str, known_repo_files: Optional[List[str]] = None) -> bool:
+    """Detects if query targets an external or different repository (e.g. facebook/react)."""
+    slug_pattern = re.compile(r"\b([a-zA-Z0-9_\-\.]+/[a-zA-Z0-9_\-\.]+)\b")
+    matches = slug_pattern.findall(clean_q)
+    curr_norm = repo_name.lower().strip()
+    curr_base = curr_norm.split("/")[-1]
+    
+    file_extensions = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".html", ".css", ".yml", ".yaml", ".sql", ".sh", ".toml", ".txt"}
+    famous_framework_slugs = {"vercel/next.js", "chartjs/chart.js", "vuejs/vue.js", "facebook/react", "angular/angular"}
+    
+    known_norm = {kf.replace("\\", "/").lower() for kf in (known_repo_files or [])}
+    
+    for m in matches:
+        m_lower = m.lower().rstrip(".,;:!?")
+        if m_lower in famous_framework_slugs:
+            if curr_norm != m_lower and curr_base != m_lower.split("/")[-1]:
+                return True
+        if any(m_lower.endswith(ext) for ext in file_extensions):
+            if known_norm:
+                if any(m_lower == kf or kf.endswith("/" + m_lower) or m_lower.endswith("/" + kf) for kf in known_norm):
+                    continue
+                if m_lower.endswith(".js") and any(org in m_lower for org in ["vercel/", "chartjs/", "vuejs/", "facebook/", "microsoft/"]):
+                    return True
+            continue
+        if m_lower == curr_norm or m_lower == curr_base or m_lower.endswith("/" + curr_base) or curr_norm.endswith("/" + m_lower):
+            continue
+        if m_lower in ("application/json", "text/html", "text/plain", "multipart/form-data", "image/png", "image/jpeg"):
+            continue
+        return True
+    return False
 
 
 def classify_query_rule_based(
@@ -112,29 +165,37 @@ def classify_query_rule_based(
     clean_q = " ".join(query.strip().split())
     q_lower = clean_q.lower()
 
-    # If the user attached specific files to review, the query is grounded in those files
-    if attached_files and len(attached_files) > 0:
-        return ScopeDecision.IN_SCOPE
+    # 1. Immediate rejection of prompt injections and bypass attempts
+    if _PROMPT_INJECTION_REGEX.search(clean_q):
+        return ScopeDecision.OUT_OF_SCOPE
 
-    # Check for direct out-of-scope patterns (definition, trivia, joke, poem, tutorial from scratch)
+    # 2. Immediate rejection of queries asking about another repository
+    if _mentions_different_repo(clean_q, repo_name, known_repo_files):
+        return ScopeDecision.OUT_OF_SCOPE
+
+    # 3. Check for direct out-of-scope patterns (definition, trivia, joke, poem, tutorial from scratch, weather, sports)
     for pattern in _OUT_OF_SCOPE_REGEXES:
         if pattern.search(clean_q):
             # Guard: If query explicitly asks about the repo usage (e.g. "What is Python in this project?"), do not refuse
-            if any(k in q_lower for k in ["this project", "this repo", "this repository", "in our code", "used here"]):
+            if any(k in q_lower for k in ["this project", "this repo", "this repository", "in our code", "used here", "in the selected repository"]):
                 return ScopeDecision.IN_SCOPE
             return ScopeDecision.OUT_OF_SCOPE
 
-    # Check for ambiguous isolated queries with zero context
+    # 4. If the user attached specific files to review, the query is grounded in those files
+    if attached_files and len(attached_files) > 0:
+        return ScopeDecision.IN_SCOPE
+
+    # 5. Check for ambiguous isolated queries with zero context
     for pattern in _AMBIGUOUS_PATTERNS:
         if pattern.search(clean_q):
             return ScopeDecision.NEEDS_CLARIFICATION
 
-    # Check for explicit in-scope repo keywords
+    # 6. Check for explicit in-scope repo keywords
     for keyword in _IN_SCOPE_KEYWORDS:
         if keyword in q_lower:
             return ScopeDecision.IN_SCOPE
 
-    # Check if query mentions a known file in the repository (e.g., "main.py", "route.ts")
+    # 7. Check if query mentions a known file in the repository (e.g., "main.py", "route.ts")
     if known_repo_files:
         words = re.findall(r"[\w\./\-]+\.\w+", clean_q)
         for w in words:

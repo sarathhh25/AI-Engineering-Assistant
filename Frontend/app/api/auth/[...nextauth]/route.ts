@@ -85,15 +85,20 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async session({ session, token }) {
-      if (session?.user && token?.sub) {
-        (session.user as any).id = token.sub
+      if (session?.user) {
+        const u = session.user as any
+        if (token?.id || token?.sub) {
+          u.id = token.id || token.sub
+        }
+        if (token?.backendToken) {
+          const s = session as any
+          s.backendToken = token.backendToken
+          u.backendToken = token.backendToken
+        }
       }
       if (token?.accessToken) {
         // @ts-ignore
         session.accessToken = token.accessToken
-      }
-      if (token?.backendToken) {
-        (session as any).backendToken = token.backendToken
       }
       return session
     },
@@ -105,6 +110,35 @@ export const authOptions: NextAuthOptions = {
         if (user.image) token.picture = user.image
         if ((user as any).backendToken) {
           token.backendToken = (user as any).backendToken
+        } else if (user.email) {
+          // Synchronize OAuth SSO user with FastAPI backend to issue session token
+          const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+          const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || ''
+          try {
+            const res = await fetch(`${backendUrl}/api/auth/sso-sync`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Internal-Secret': secret,
+              },
+              body: JSON.stringify({
+                email: user.email,
+                full_name: user.name || user.email.split('@')[0],
+                auth_provider: account?.provider || 'oauth',
+                avatar_url: user.image || null,
+                github_access_token: account?.provider === 'github' ? account.access_token : undefined,
+              }),
+            })
+            if (res.ok) {
+              const data = await res.json()
+              if (data.token) {
+                token.backendToken = data.token
+                token.id = String(data.user.id)
+              }
+            }
+          } catch (err) {
+            console.error('Failed to sync OAuth user with backend:', err)
+          }
         }
       }
       if (account?.access_token) {

@@ -92,36 +92,68 @@ export function IntegrationCard({
           {tool.description}
         </p>
 
-        {isGitHub && githubErrorMessage && effectiveStatus === 'Error' && (
+        {isGitHub && (githubErrorMessage || (githubStatus?.status === 'Error' && githubStatus?.message)) && (
           <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-[10px] flex flex-col gap-1.5 font-mono">
-            <div className="flex items-start justify-between gap-1.5">
-              <div className="flex items-center gap-1.5">
-                <AlertCircle className="size-3.5 shrink-0" />
-                <span className="font-semibold text-[10px] uppercase tracking-wider">OAuth Configuration Needed</span>
-              </div>
-              {onDismissError && (
-                <button
-                  onClick={onDismissError}
-                  className="text-muted-foreground hover:text-foreground text-[10px] cursor-pointer"
-                  title="Dismiss error"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <p className="text-[10px] leading-relaxed break-words font-sans">{githubErrorMessage}</p>
-            {onOpenSetupGuide && (
-              <button
-                onClick={onOpenSetupGuide}
-                className="mt-0.5 text-[10px] text-primary hover:underline text-left font-sans font-semibold cursor-pointer"
-              >
-                View OAuth setup instructions →
-              </button>
-            )}
+            {(() => {
+              const errMsg = githubErrorMessage || githubStatus?.message || 'Error communicating with service.'
+              const isAuthErr = errMsg.toLowerCase().includes('authentication required') ||
+                errMsg.toLowerCase().includes('log in') ||
+                errMsg.toLowerCase().includes('not authenticated')
+              const isConfigErr = !isAuthErr && (
+                errMsg.toLowerCase().includes('client_id') ||
+                errMsg.toLowerCase().includes('configured') ||
+                errMsg.toLowerCase().includes('missing_credentials') ||
+                errMsg.toLowerCase().includes('oauth')
+              )
+              const isTimeoutOrNetwork = !isAuthErr && !isConfigErr && (
+                errMsg.toLowerCase().includes('timed out') ||
+                errMsg.toLowerCase().includes('unreachable') ||
+                errMsg.toLowerCase().includes('offline')
+              )
+
+              return (
+                <>
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="size-3.5 shrink-0" />
+                      <span className="font-semibold text-[10px] uppercase tracking-wider">
+                        {isAuthErr ? 'Authentication Required' : isTimeoutOrNetwork ? 'Backend Connection Error' : isConfigErr ? 'OAuth Configuration Needed' : 'Integration Error'}
+                      </span>
+                    </div>
+                    {onDismissError && (
+                      <button
+                        onClick={onDismissError}
+                        className="text-muted-foreground hover:text-foreground text-[10px] cursor-pointer"
+                        title="Dismiss error"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] leading-relaxed break-words font-sans">{errMsg}</p>
+                  {isAuthErr && (
+                    <a
+                      href="/login"
+                      className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline font-sans font-semibold cursor-pointer"
+                    >
+                      Log in to your account →
+                    </a>
+                  )}
+                  {isConfigErr && onOpenSetupGuide && (
+                    <button
+                      onClick={onOpenSetupGuide}
+                      className="mt-0.5 text-[10px] text-primary hover:underline text-left font-sans font-semibold cursor-pointer"
+                    >
+                      View OAuth setup instructions →
+                    </button>
+                  )}
+                </>
+              )
+            })()}
           </div>
         )}
 
-        {isGitHub && !githubErrorMessage && effectiveStatus === 'Setup Required' && (
+        {isGitHub && !githubErrorMessage && !(githubStatus?.status === 'Error') && effectiveStatus === 'Setup Required' && (
           <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] flex items-center justify-between font-mono">
             <span>OAuth credentials needed in .env</span>
             {onOpenSetupGuide && (
@@ -170,6 +202,13 @@ export function IntegrationCard({
                 <span>Disconnect</span>
               </button>
             </div>
+          ) : isGitHub && (githubErrorMessage?.toLowerCase().includes('authentication required') || githubErrorMessage?.toLowerCase().includes('log in')) ? (
+            <a
+              href="/login"
+              className="w-full py-1.5 rounded-xl bg-primary text-primary-foreground font-semibold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
+            >
+              <span>Log In to Connect GitHub</span>
+            </a>
           ) : (
             <button
               onClick={() => onConnectClick(tool)}

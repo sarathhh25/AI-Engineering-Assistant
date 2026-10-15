@@ -14,7 +14,7 @@ export function GitHubSetupModal({ isOpen, onClose, onCheckAgain }: GitHubSetupM
   const [isChecking, setIsChecking] = useState(false)
   const [checkResult, setCheckResult] = useState<string | null>(null)
 
-  const host = typeof window !== 'undefined' ? window.location.hostname : '10.144.212.47'
+  const host = typeof window !== 'undefined' ? (window.location.hostname || 'localhost') : 'localhost'
   const callbackUrl = `http://${host}:8000/api/integrations/github/callback`
 
   if (!isOpen) return null
