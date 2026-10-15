@@ -4,7 +4,18 @@
  * Supports timeouts, retries, error handling, and graceful offline fallback.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+export function resolveApiBaseUrl(): string {
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    const hostname = window.location.hostname
+    const protocol = window.location.protocol || 'http:'
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return `${protocol}//${hostname}:8000`
+    }
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 interface FetchOptions extends RequestInit {
   timeoutMs?: number
@@ -61,9 +72,13 @@ class ApiClient {
     this.baseUrl = baseUrl
   }
 
+  private getEffectiveBaseUrl(): string {
+    return resolveApiBaseUrl() || this.baseUrl
+  }
+
   private async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const { timeoutMs = 10000, retries = 2, ...fetchOptions } = options
-    const url = `${this.baseUrl}${endpoint}`
+    const url = `${this.getEffectiveBaseUrl()}${endpoint}`
 
     let lastError: Error | null = null
 

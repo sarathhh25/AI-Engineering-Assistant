@@ -14,7 +14,8 @@ export function GitHubSetupModal({ isOpen, onClose, onCheckAgain }: GitHubSetupM
   const [isChecking, setIsChecking] = useState(false)
   const [checkResult, setCheckResult] = useState<string | null>(null)
 
-  const callbackUrl = 'http://localhost:8000/api/integrations/github/callback'
+  const host = typeof window !== 'undefined' ? window.location.hostname : '10.144.212.47'
+  const callbackUrl = `http://${host}:8000/api/integrations/github/callback`
 
   if (!isOpen) return null
 
@@ -100,7 +101,7 @@ export function GitHubSetupModal({ isOpen, onClose, onCheckAgain }: GitHubSetupM
               </a>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Set Application Name to <code className="bg-secondary px-1 py-0.5 rounded text-foreground font-mono">AI Engineering Assistant</code> and Homepage URL to <code className="bg-secondary px-1 py-0.5 rounded text-foreground font-mono">http://localhost:3000</code>.
+              Set Application Name to <code className="bg-secondary px-1 py-0.5 rounded text-foreground font-mono">AI Engineering Assistant</code> and Homepage URL to <code className="bg-secondary px-1 py-0.5 rounded text-foreground font-mono">{`http://${host}:3000`}</code>.
             </p>
           </div>
 
@@ -108,7 +109,7 @@ export function GitHubSetupModal({ isOpen, onClose, onCheckAgain }: GitHubSetupM
           <div className="space-y-2 p-3 rounded-xl bg-secondary/50 border border-border">
             <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
               <span className="size-4 rounded-full bg-primary/20 text-primary text-[10px] font-mono flex items-center justify-center font-bold">2</span>
-              Set Authorization Callback URL
+              Set Authorization Callback URL (Integrations Hub)
             </span>
             <div className="flex items-center gap-2">
               <input

@@ -29,23 +29,26 @@ DEFAULT_OAUTH_SCOPES = "repo,read:user,user:email"
 def get_oauth_credentials() -> Tuple[Optional[str], Optional[str], str]:
     """
     Retrieves GitHub OAuth credentials and redirect URI from environment.
-    Supports GITHUB_CLIENT_ID, GITHUB_ID, NEXT_PUBLIC_GITHUB_CLIENT_ID,
-    and GITHUB_CLIENT_SECRET, GITHUB_SECRET.
+    Supports GITHUB_INTEGRATION_CLIENT_ID, GITHUB_CLIENT_ID, GITHUB_ID, NEXT_PUBLIC_GITHUB_CLIENT_ID,
+    and GITHUB_INTEGRATION_CLIENT_SECRET, GITHUB_CLIENT_SECRET, GITHUB_SECRET.
     """
     client_id = (
-        os.getenv("GITHUB_CLIENT_ID")
+        os.getenv("GITHUB_INTEGRATION_CLIENT_ID")
+        or os.getenv("GITHUB_CLIENT_ID")
         or os.getenv("GITHUB_ID")
         or os.getenv("NEXT_PUBLIC_GITHUB_CLIENT_ID")
         or ""
     ).strip().strip(' "\'')
     client_secret = (
-        os.getenv("GITHUB_CLIENT_SECRET")
+        os.getenv("GITHUB_INTEGRATION_CLIENT_SECRET")
+        or os.getenv("GITHUB_CLIENT_SECRET")
         or os.getenv("GITHUB_SECRET")
         or ""
     ).strip().strip(' "\'')
+    backend_base = (os.getenv("BACKEND_URL") or "http://10.144.212.47:8000").rstrip("/")
     redirect_uri = (
         os.getenv("GITHUB_REDIRECT_URI")
-        or "http://localhost:8000/api/integrations/github/callback"
+        or f"{backend_base}/api/integrations/github/callback"
     ).strip().strip(' "\'')
 
     if client_id in ("your_github_client_id_here", "your_client_id_here", ""):
@@ -88,10 +91,11 @@ def create_authorization_url(
             (OAuthState.expires_at < datetime.datetime.now(datetime.timezone.utc))
         ).delete(synchronize_session=False)
 
+        frontend_base = (os.getenv("FRONTEND_URL") or os.getenv("NEXTAUTH_URL") or "http://10.144.212.47:3000").rstrip("/")
         oauth_state = OAuthState(
             state=state,
             user_id=user_id,
-            redirect_url=redirect_url or "http://localhost:3000/integrations",
+            redirect_url=redirect_url or f"{frontend_base}/dashboard?tab=integrations",
             expires_at=expires_at,
         )
         db.add(oauth_state)
@@ -125,7 +129,8 @@ async def process_oauth_callback(
     retrieves real user profile, encrypts token, and persists connection.
     Returns (success, message, redirect_destination, user_info).
     """
-    default_redirect = "http://localhost:3000/dashboard?tab=integrations"
+    frontend_base = (os.getenv("FRONTEND_URL") or os.getenv("NEXTAUTH_URL") or "http://10.144.212.47:3000").rstrip("/")
+    default_redirect = f"{frontend_base}/dashboard?tab=integrations"
 
     # Handle GitHub user cancellation / error
     if error:
