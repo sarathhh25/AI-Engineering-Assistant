@@ -50,7 +50,9 @@ export function AuthPage() {
 
   const [formError, setFormError] = useState<string | null>(null)
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+  const API_BASE_URL = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000')
 
   async function backendAuth(endpoint: 'login' | 'register', payload: Record<string, string>) {
     const res = await fetch(`${API_BASE_URL}/api/auth/${endpoint}`, {
