@@ -16,6 +16,8 @@ interface WorkspaceMainProps {
   activeProject?: string
   activeRepo?: string
   onOpenProjects?: () => void
+  onOpenRepos?: () => void
+  onSelectRepo?: (repoName: string) => void
   onUpdateChatTitle?: (chatId: string, title: string) => void
 }
 
@@ -27,6 +29,8 @@ export function WorkspaceMain({
   activeProject,
   activeRepo,
   onOpenProjects,
+  onOpenRepos,
+  onSelectRepo,
   onUpdateChatTitle,
 }: WorkspaceMainProps) {
   const [internalActiveTab, setInternalActiveTab] = useState<string>('chat')
@@ -40,6 +44,13 @@ export function WorkspaceMain({
           <Dashboard
             onQuickAction={(actionId) => {
               if (actionId === 'ask-copilot' && externalSetActiveTab) {
+                externalSetActiveTab('chat')
+              }
+            }}
+            onSelectRepo={(r) => {
+              if (onSelectRepo) {
+                onSelectRepo(r.name)
+              } else if (externalSetActiveTab) {
                 externalSetActiveTab('chat')
               }
             }}
@@ -61,6 +72,7 @@ export function WorkspaceMain({
             activeProject={activeProject}
             activeRepo={activeRepo}
             onOpenProjects={onOpenProjects}
+            onOpenRepos={onOpenRepos}
             onOpenSettings={onOpenSettings}
             onUpdateChatTitle={onUpdateChatTitle}
           />

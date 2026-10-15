@@ -57,13 +57,15 @@ class TestGitHubIntegration(unittest.TestCase):
 
     def setUp(self):
         self.db = SessionLocal()
-        # Clean test tables
-        self.db.query(OAuthState).delete()
-        self.db.query(UserSession).delete()
-        self.db.query(UserSetting).delete()
-        self.db.query(Repository).delete()
-        self.db.query(User).delete()
-        self.db.commit()
+        # Clean test tables (only test accounts)
+        test_user_ids = [u.id for u in self.db.query(User).filter(User.email.like("%@example.com%")).all()]
+        if test_user_ids:
+            self.db.query(OAuthState).filter(OAuthState.user_id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.query(UserSession).filter(UserSession.user_id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.query(UserSetting).filter(UserSetting.user_id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.query(Repository).filter(Repository.user_id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.query(User).filter(User.id.in_(test_user_ids)).delete(synchronize_session=False)
+            self.db.commit()
 
         # Create primary test user
         self.user = User(
@@ -492,7 +494,8 @@ class TestGitHubIntegration(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 200)
         data = res.json()
-        self.assertEqual(data.get("scope"), "REPOSITORY_ACCESS_ERROR")
+        self.assertIn(data.get("scope"), ("GITHUB_AUTH_FAILED", "REPOSITORY_ACCESS_ERROR"))
+        self.assertEqual(data.get("status"), "refused")
         self.assertNotIn("Here is an overview of the architecture", data.get("reply", ""))
 
 

@@ -21,6 +21,7 @@ interface ChatInputAreaProps {
   activeProject?: string
   activeRepo?: string
   onOpenProjects?: () => void
+  onOpenRepos?: () => void
 }
 
 export function ChatInputArea({
@@ -30,6 +31,7 @@ export function ChatInputArea({
   activeProject,
   activeRepo,
   onOpenProjects,
+  onOpenRepos,
 }: ChatInputAreaProps) {
   const [text, setText] = useState('')
   const [repoContextEnabled, setRepoContextEnabled] = useState(true)
@@ -192,20 +194,20 @@ export function ChatInputArea({
                   <span className="hidden sm:inline">Attach</span>
                 </button>
 
-                {/* Repo / Project Context Status Badge */}
+                {/* Active Repository Context Status Badge */}
                 <button
                   type="button"
-                  onClick={onOpenProjects || (() => setRepoContextEnabled((prev) => !prev))}
+                  onClick={onOpenRepos || onOpenProjects || (() => setRepoContextEnabled((prev) => !prev))}
                   className={`px-2.5 py-1 rounded-md border text-[11px] font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
                     repoContextEnabled
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20'
                       : 'bg-muted text-muted-foreground border-border hover:bg-secondary'
                   }`}
-                  title={onOpenProjects ? 'Click to switch active project/repository' : 'Toggle Repository Vector Context'}
+                  title={onOpenRepos ? 'Click to select active GitHub repository' : 'Toggle Repository Context'}
                 >
                   <Database className="size-3 text-emerald-500" />
                   <span className="font-semibold text-foreground truncate max-w-[150px] sm:max-w-[220px]">
-                    {activeProject || activeRepo || 'ai-engineering-assistant'}
+                    {activeRepo || 'Select Repository'}
                   </span>
                   <span className="text-[9px] text-emerald-500 font-bold hidden sm:inline">● Active</span>
                 </button>

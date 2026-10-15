@@ -12,6 +12,12 @@ import urllib.parse
 from typing import Optional, Dict, Any, List, Tuple
 import httpx
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+_root_dir = os.path.dirname(_base_dir)
+load_dotenv(dotenv_path=os.path.join(_root_dir, ".env"))
+load_dotenv(dotenv_path=os.path.join(_root_dir, "Frontend", ".env.local"))
 
 try:
     from Backend.database import User, UserSetting, OAuthState, Repository
@@ -137,7 +143,7 @@ def create_authorization_url(
         "state": state,
         "allow_signup": "true",
     }
-    encoded_params = "&".join(f"{k}={v}" for k, v in query_params.items())
+    encoded_params = urllib.parse.urlencode(query_params)
     auth_url = f"{GITHUB_AUTH_URL}?{encoded_params}"
 
     return {
@@ -149,7 +155,7 @@ def create_authorization_url(
 
 def _build_redirect_with_params(base_url: str, params: Dict[str, str]) -> str:
     sep = "&" if "?" in base_url else "?"
-    query = "&".join(f"{k}={urllib.parse.quote(str(v))}" for k, v in params.items())
+    query = urllib.parse.urlencode(params)
     return f"{base_url}{sep}{query}"
 
 
@@ -419,7 +425,13 @@ async def list_user_repositories(
     """
     token = get_user_decrypted_token(user)
     if not token:
-        # Check if server-level fallback token is configured
+        if user:
+            # Authenticated user has NOT connected their own GitHub account!
+            # Do NOT fall back to server-level GITHUB_TOKEN or another user's token!
+            raise PermissionError(
+                "GitHub is not connected. Please connect your GitHub account in Integrations Hub."
+            )
+        # Check if server-level fallback token is configured for guest / local developer
         fallback_token = os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
         if fallback_token and fallback_token != "your_github_personal_access_token_here":
             token = fallback_token
@@ -484,7 +496,9 @@ async def list_user_repositories(
                 "permissions": r.get("permissions", {}),
             })
 
-        selected = (user.settings.selected_repo if (user and user.settings) else None) or "ai-engineering-assistant"
+        selected = (user.settings.selected_repo if (user and user.settings and user.settings.selected_repo) else None)
+        if not selected and sanitized_repos:
+            selected = sanitized_repos[0]["full_name"]
 
         return {
             "repositories": sanitized_repos,
@@ -508,7 +522,10 @@ async def select_active_repository(
     if not clean_name:
         raise ValueError("Repository name cannot be empty.")
 
-    token = get_user_decrypted_token(user) or os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
+    if user:
+        token = get_user_decrypted_token(user)
+    else:
+        token = os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
 
     # Allow local workspace repo
     is_local = clean_name.lower() in ("ai-engineering-assistant", "ai_engineering_assistant")

@@ -244,41 +244,23 @@ class ApiClient {
     }
   }
 
-  async fetchGitHubRepo(repo: string = 'ai-engineering-assistant'): Promise<GitHubRepoDetails> {
-    try {
-      return await this.request('/api/github/repository', {
-        method: 'POST',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ repo }),
-        timeoutMs: 15000,
-      })
-    } catch (e: any) {
-      return {
-        name: repo,
-        owner: 'Local Workspace',
-        branch: 'main',
-        language: 'TypeScript / Python',
-        stars: 0,
-        commits_count: 0,
-        open_issues_count: 0,
-        open_prs_count: 0,
-        status: 'disconnected',
-      }
-    }
+  async fetchGitHubRepo(repo?: string): Promise<GitHubRepoDetails> {
+    return await this.request('/api/github/repository', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo: repo || undefined }),
+      timeoutMs: 15000,
+    })
   }
 
-  async fetchGitHubBranches(repo: string = 'ai-engineering-assistant'): Promise<string[]> {
-    try {
-      const res = await this.request<{ branches: string[] }>('/api/github/branches', {
-        method: 'POST',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ repo }),
-        timeoutMs: 15000,
-      })
-      return res.branches || ['main']
-    } catch (e) {
-      return ['main']
-    }
+  async fetchGitHubBranches(repo?: string): Promise<string[]> {
+    const res = await this.request<{ branches: string[] }>('/api/github/branches', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo: repo || undefined }),
+      timeoutMs: 15000,
+    })
+    return res.branches || []
   }
 
   async executeAgent(
@@ -312,12 +294,18 @@ class ApiClient {
     created_at?: string
     updated_at?: string
   }>> {
-    return await this.request('/api/conversations', {
+    const res = await this.request<any>('/api/conversations', {
       method: 'GET',
       headers: this.getAuthHeaders(),
       timeoutMs: 10000,
       retries: 1,
     })
+    const list = res.conversations || (Array.isArray(res) ? res : [])
+    return list.map((c: any) => ({
+      ...c,
+      id: String(c.id),
+      repo_name: c.repo_name || '',
+    }))
   }
 
   async createConversation(title?: string, repoName?: string): Promise<{
@@ -325,12 +313,18 @@ class ApiClient {
     title: string
     repo_name: string
   }> {
-    return await this.request('/api/conversations', {
+    const res = await this.request<any>('/api/conversations', {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ title, repo_name: repoName }),
       timeoutMs: 10000,
     })
+    const c = res.conversation || res
+    return {
+      ...c,
+      id: String(c.id),
+      repo_name: c.repo_name || repoName || '',
+    }
   }
 
   async getConversation(id: string): Promise<{
@@ -345,11 +339,25 @@ class ApiClient {
       references?: string[]
     }>
   }> {
-    return await this.request(`/api/conversations/${encodeURIComponent(id)}`, {
+    const rawId = String(id).startsWith('conv-') ? id.replace('conv-', '') : id
+    const res = await this.request<any>(`/api/conversations/${encodeURIComponent(rawId)}`, {
       method: 'GET',
       headers: this.getAuthHeaders(),
       timeoutMs: 10000,
     })
+    const c = res.conversation || res
+    return {
+      ...c,
+      id: String(c.id),
+      repo_name: c.repo_name || '',
+      messages: (c.messages || []).map((m: any) => ({
+        id: String(m.id),
+        sender: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+        timestamp: m.created_at || 'Recently',
+        references: m.metadata?.references || [],
+      })),
+    }
   }
 
   async renameConversation(id: string, title: string): Promise<{ id: string; title: string }> {

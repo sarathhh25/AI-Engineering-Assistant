@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Layers,
   FolderKanban,
+  FolderGit2,
   ChevronDown,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
@@ -20,6 +21,7 @@ export interface TopNavProps {
   activeProject?: string
   activeRepo?: string
   onOpenProjects?: () => void
+  onOpenRepos?: () => void
 }
 
 export function TopNav({
@@ -28,6 +30,7 @@ export function TopNav({
   activeProject,
   activeRepo,
   onOpenProjects,
+  onOpenRepos,
 }: TopNavProps) {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -64,22 +67,35 @@ export function TopNav({
     <header className="w-full shrink-0 flex flex-col z-20 select-none antialiased">
       {/* Clean Top Header Row for Center Workspace */}
       <div className="h-12 w-full border-b border-border/80 bg-background/95 backdrop-blur-md px-4 flex items-center justify-between gap-3 text-xs font-sans">
-        {/* Left Section: Active View Indicator & Active Project Selector */}
+        {/* Left Section: Active View Indicator & Active Repository Selector */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-secondary/60 text-foreground font-medium text-xs border border-border/60">
             <Layers className="size-3.5 text-primary" />
             <span suppressHydrationWarning>{activeTabTitle}</span>
           </div>
 
+          {/* Active GitHub Repository Selector (Real account repos) */}
+          <button
+            onClick={onOpenRepos}
+            title="Click to select active GitHub repository"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 transition-all text-xs font-mono font-medium cursor-pointer shadow-xs"
+          >
+            <FolderGit2 className="size-3.5 text-emerald-500 shrink-0" />
+            <span className="font-semibold truncate max-w-[140px] sm:max-w-[220px]">
+              {activeRepo || 'Select Repository'}
+            </span>
+            <ChevronDown className="size-3 opacity-60 shrink-0" />
+          </button>
+
+          {/* Workspace Project Badge (Workspace organization separate from GitHub repo) */}
           {activeProject && (
             <button
               onClick={onOpenProjects}
-              title="Click to switch active project context"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/25 transition-all text-xs font-medium cursor-pointer"
+              title="Click to view workspace project organization"
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary/80 hover:bg-secondary text-muted-foreground hover:text-foreground border border-border transition-all text-xs font-medium cursor-pointer"
             >
-              <FolderKanban className="size-3.5 text-primary" />
-              <span className="font-semibold truncate max-w-[140px] sm:max-w-[200px]">{activeProject}</span>
-              <ChevronDown className="size-3 opacity-60 shrink-0" />
+              <FolderKanban className="size-3.5 text-primary shrink-0" />
+              <span className="truncate max-w-[120px] text-[11px]">{activeProject}</span>
             </button>
           )}
         </div>

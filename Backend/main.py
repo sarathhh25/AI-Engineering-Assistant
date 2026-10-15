@@ -848,301 +848,7 @@ async def github_sync_token_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-def is_web_search_worthy(query: str) -> bool:
-    """
-    Determines if a query genuinely requires external, real-time web retrieval.
-    General coding, syntax, debugging, algorithms, framework concepts, IDE/emulator issues,
-    and repository inquiries should NOT trigger slow/noisy web searches.
-    """
-    q = query.lower().strip()
-    if is_smalltalk(query):
-        return False
-    triggers = [
-        "latest news", "current weather", "who is the current", "who is the president",
-        "who is the prime minister", "who won", "stock price", "search the web for",
-        "search online for", "cve-202", "release notes for 2026",
-    ]
-    return any(t in q for t in triggers)
 
-
-def get_realtime_context(query: str) -> str:
-    if not is_web_search_worthy(query):
-        return "No recent web data found."
-
-    context_parts = []
-    
-    # 1. Try DuckDuckGo Instant Answer API (fast, structured, no rate limits)
-    try:
-        encoded_q = urllib.parse.quote(query)
-        req = urllib.request.Request(
-            f"https://api.duckduckgo.com/?q={encoded_q}&format=json&no_html=1&skip_disambig=1",
-            headers={"User-Agent": "AIEngineeringAssistant/1.0"}
-        )
-        with urllib.request.urlopen(req, timeout=3) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            abstract = data.get("AbstractText", "").strip()
-            heading = data.get("Heading", "").strip()
-            if abstract:
-                context_parts.append(f"{heading}: {abstract}" if heading else abstract)
-            for topic in data.get("RelatedTopics", [])[:2]:
-                if isinstance(topic, dict) and topic.get("Text"):
-                    context_parts.append(f"- {topic.get('Text')}")
-    except Exception:
-        pass
-
-    # 2. Try Wikipedia Search API for factual, leadership, or general queries if DDG returned nothing
-    if not context_parts or len(" ".join(context_parts)) < 80:
-        try:
-            encoded_q = urllib.parse.quote(query)
-            req = urllib.request.Request(
-                f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={encoded_q}&utf8=&format=json",
-                headers={"User-Agent": "AIEngineeringAssistant/1.0"}
-            )
-            with urllib.request.urlopen(req, timeout=3) as response:
-                data = json.loads(response.read().decode("utf-8"))
-                search_results = data.get("query", {}).get("search", [])
-                for item in search_results[:2]:
-                    title = item.get("title", "")
-                    snippet = item.get("snippet", "").replace('<span class="searchmatch">', '').replace('</span>', '')
-                    if snippet:
-                        context_parts.append(f"- {title}: {snippet}")
-        except Exception:
-            pass
-
-    return "\n".join(context_parts) if context_parts else "No recent web data found."
-
-def get_local_workspace_files(max_files=40) -> list:
-    try:
-        workspace_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        file_list = []
-        ignore_dirs = {'.git', 'node_modules', '.next', '__pycache__', '.venv', 'venv', 'brain', '.gemini', 'scratch'}
-        for root, dirs, files in os.walk(workspace_dir):
-            dirs[:] = [d for d in dirs if d not in ignore_dirs]
-            for f in files:
-                rel_path = os.path.relpath(os.path.join(root, f), workspace_dir)
-                file_list.append(rel_path.replace('\\', '/'))
-                if len(file_list) >= max_files:
-                    break
-            if len(file_list) >= max_files:
-                break
-        return file_list
-    except Exception:
-        return []
-
-PROJECT_PROFILES = {
-    "ai-engineering-assistant": {
-        "name": "AI Engineering Assistant",
-        "repo": "ai-engineering-assistant",
-        "language": "TypeScript / Python",
-        "type": "Full-Stack AI Developer Copilot",
-        "overview": (
-            "A full-stack, AI-powered developer assistant and engineering workspace. It combines a Next.js 16 "
-            "(App Router, React 19, Tailwind CSS) web frontend with a Python FastAPI backend service to provide "
-            "interactive AI chat capabilities, dashboard analytics, code telemetry, user authentication, and API management."
-        ),
-        "tech_stack": [
-            "Frontend: Next.js 16, React 19, Tailwind CSS, Lucide Icons, NextAuth.js",
-            "Backend: FastAPI, Python 3.11, Google GenAI SDK (Gemini), PyGithub",
-            "Database: PostgreSQL / SQLite with SQLAlchemy ORM, bcrypt security"
-        ],
-        "key_features": [
-            "Conversational Workspace with multi-file code attachment and dynamic thread naming",
-            "Autonomous multi-agent execution center for code review and refactoring",
-            "Interactive Repository Explorer and live pull request risk scoring",
-            "Authentication supporting OAuth (Google, GitHub) and local workspace credentials"
-        ],
-        "files": [
-            "Frontend/app/api/chat/route.ts", "Frontend/components/app-shell.tsx",
-            "Frontend/components/chat/chat-workspace.tsx", "Backend/main.py", "Backend/database.py"
-        ]
-    },
-    "curiousbees": {
-        "name": "CuriousBees",
-        "repo": "CuriousBees",
-        "language": "Python",
-        "type": "Educational Intelligence & STEM Tutoring Platform",
-        "overview": (
-            "CuriousBees is an AI-driven educational intelligence and automated STEM learning platform. "
-            "It delivers personalized learning paths, adaptive quiz generation, knowledge-gap diagnosis, "
-            "and automated student performance analytics."
-        ),
-        "tech_stack": [
-            "Core: Python 3.11, FastAPI / Flask, PyTorch / Hugging Face Transformers",
-            "Database & Cache: PostgreSQL, Redis (session scoring & state caching)",
-            "Analytics: NumPy, Pandas, Scikit-learn for skill progression modeling"
-        ],
-        "key_features": [
-            "Adaptive Quiz Engine: Dynamically adjusts problem difficulty based on real-time student mastery",
-            "Knowledge Gap Analysis: Pinpoints prerequisite misconceptions across STEM and programming concepts",
-            "Curriculum Recommender: Personalized study roadmap sequencing and revision milestones",
-            "Code & Exercise Evaluator: Explanatory step-by-step reasoning for student submissions"
-        ],
-        "files": [
-            "curriculum_engine/planner.py", "adaptive_quiz/generator.py", "analytics/knowledge_graph.py",
-            "models/student_mastery.py", "api/routes/tutoring.py", "config/curriculum_config.yaml"
-        ]
-    },
-    "google_maps": {
-        "name": "Google Maps Route Optimizer",
-        "repo": "Google_maps",
-        "language": "Python",
-        "type": "Geospatial Logistics & Route Optimization Engine",
-        "overview": (
-            "Google Maps Route Optimizer is a high-performance geospatial logistics and route optimization engine. "
-            "It integrates Google Maps APIs, graph algorithms (Dijkstra, A*, Genetic Algorithms), and real-time traffic heuristics "
-            "to calculate optimal multi-stop delivery routes, minimize transit latency, and reduce fuel consumption."
-        ),
-        "tech_stack": [
-            "Core: Python 3.11, Google Maps SDK, NetworkX, GeoPandas, Shapely",
-            "Optimization: Google OR-Tools, SciPy, NumPy",
-            "API: FastAPI with asynchronous geocoding and Redis distance caching"
-        ],
-        "key_features": [
-            "Multi-Stop Route Sequencing: Solves Traveling Salesperson (TSP) and Vehicle Routing Problems (VRP)",
-            "Live Traffic Heuristics: Dynamically adjusts routes around congestion and incident alerts",
-            "Distance Matrix Cache: Efficient Redis caching for frequent origin-destination coordinate pairs",
-            "GeoJSON Visualization: Exportable map layers for dispatchers and fleet management dashboards"
-        ],
-        "files": [
-            "optimizer/tsp_solver.py", "routing/matrix_service.py", "geocoding/address_parser.py",
-            "traffic/heuristics.py", "api/routes/dispatch.py", "tests/test_routing.py"
-        ]
-    },
-    "financial-tracker": {
-        "name": "Financial Tracker",
-        "repo": "Financial-Tracker",
-        "language": "Python",
-        "type": "Personal Finance & Investment Portfolio Analytics",
-        "overview": (
-            "Financial Tracker is an automated personal finance, expense categorization, and investment tracking suite. "
-            "It automates bank statement ingestion, classifies transactions using machine learning, tracks budget forecasts, "
-            "and provides live stock portfolio performance analytics."
-        ),
-        "tech_stack": [
-            "Core: Python 3.11, FastAPI, Pandas, SQLAlchemy",
-            "Market Data: yfinance API, Alpha Vantage SDK",
-            "Machine Learning: Scikit-learn (automated transaction classifier)"
-        ],
-        "key_features": [
-            "Transaction Categorization: Machine-learning categorization of income and expenses",
-            "Cash Flow & Budget Forecasting: Predicts monthly burn rate, discretionary budget, and runway",
-            "Portfolio Valuation: Real-time ticker tracking, dividend yields, and capital gains tax estimations",
-            "Spending Alerts: Automated warnings when category thresholds are reached"
-        ],
-        "files": [
-            "portfolio/tracker.py", "classifier/transaction_rules.py", "forecast/cashflow.py",
-            "market_data/yfinance_client.py", "db/models/transactions.py"
-        ]
-    }
-}
-
-def get_project_profile(repo_name: str) -> dict:
-    key = (repo_name or "").lower().replace("_", "-").replace(" ", "-")
-    for k, profile in PROJECT_PROFILES.items():
-        k_clean = k.lower().replace("_", "-").replace(" ", "-")
-        if k_clean in key or key in k_clean:
-            return profile
-    return {
-        "name": repo_name,
-        "repo": repo_name,
-        "language": "Python / TypeScript",
-        "type": "Software Engineering Repository",
-        "overview": f"Repository '{repo_name}' is an active software project configured in your engineering workspace.",
-        "tech_stack": ["Modern software engineering toolchain"],
-        "key_features": ["Source code management", "CI/CD automation", "Issue & PR tracking"],
-        "files": []
-    }
-
-def get_github_context(query: str, repo_name: str) -> str:
-    proj = get_project_profile(repo_name)
-    github_token = os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
-
-    is_local_workspace = (repo_name or "").lower() in ["ai-engineering-assistant", "ai_engineering_assistant", "ai-engineering-copilot"]
-    if is_local_workspace:
-        local_files = get_local_workspace_files()
-        files_str = f"Workspace Files ({len(local_files)} files): {', '.join(local_files)}"
-    else:
-        files_str = f"Project Key Modules & Files: {', '.join(proj.get('files', []))}" if proj.get('files') else ""
-
-    if not github_token or github_token == "your_github_personal_access_token_here":
-        profile_summary = (
-            f"ACTIVE PROJECT: {proj['name']} ({proj['repo']})\n"
-            f"Primary Language: {proj['language']}\n"
-            f"Project Type: {proj['type']}\n"
-            f"Project Overview: {proj['overview']}\n"
-            f"Tech Stack: {'; '.join(proj['tech_stack'])}\n"
-            f"Key Capabilities: {'; '.join(proj['key_features'])}\n"
-        )
-        if files_str:
-            profile_summary += f"{files_str}\n"
-        return profile_summary
-
-    try:
-        g = Github(auth=Auth.Token(github_token))
-        repo = None
-
-        if "/" in repo_name:
-            try:
-                repo = g.get_repo(repo_name)
-            except Exception:
-                pass
-        else:
-            try:
-                user = g.get_user()
-                repo = user.get_repo(repo_name)
-            except Exception:
-                pass
-
-        if not repo:
-            profile_summary = (
-                f"ACTIVE PROJECT: {proj['name']} ({proj['repo']})\n"
-                f"Primary Language: {proj['language']}\n"
-                f"Project Type: {proj['type']}\n"
-                f"Project Overview: {proj['overview']}\n"
-                f"Tech Stack: {'; '.join(proj['tech_stack'])}\n"
-                f"Key Capabilities: {'; '.join(proj['key_features'])}\n"
-            )
-            if files_str:
-                profile_summary += f"{files_str}\n"
-            return profile_summary
-
-        github_data = f"ACTIVE REPOSITORY: {repo.full_name}\n"
-        github_data += f"Default Branch: {repo.default_branch}\n"
-
-        try:
-            branches = [b.name for b in repo.get_branches()[:10]]
-            github_data += f"Branches: {', '.join(branches)}\n"
-        except Exception:
-            pass
-
-        try:
-            tree = repo.get_git_tree(repo.default_branch, recursive=True)
-            remote_files = [item.path for item in tree.tree if item.type == 'blob'][:40]
-            github_data += f"Remote Repository Files ({len(remote_files)} shown): {', '.join(remote_files)}\n"
-        except Exception:
-            github_data += f"{files_str}\n"
-
-        try:
-            pulls = repo.get_pulls(state='open', sort='updated', direction='desc')
-            for pr in pulls[:5]:
-                risk_flag = "(RISKY: Massive PR)" if pr.additions > 500 else ""
-                github_data += f"- PR #{pr.number} (Author: {pr.user.login}): '{pr.title}'. Additions: {pr.additions}. {risk_flag}\n"
-        except Exception:
-            pass
-
-        return github_data
-    except Exception:
-        profile_summary = (
-            f"ACTIVE PROJECT: {proj['name']} ({proj['repo']})\n"
-            f"Primary Language: {proj['language']}\n"
-            f"Project Type: {proj['type']}\n"
-            f"Project Overview: {proj['overview']}\n"
-            f"Tech Stack: {'; '.join(proj['tech_stack'])}\n"
-            f"Key Capabilities: {'; '.join(proj['key_features'])}\n"
-        )
-        if files_str:
-            profile_summary += f"{files_str}\n"
-        return profile_summary
 
 _GREETING_PATTERNS = {
     "hi", "hii", "hiii", "hey", "heyy", "hello", "helo", "yo", "sup",
@@ -1222,8 +928,8 @@ def generate_grounded_offline_summary(user_question: str, repo_name: str, eviden
         f"Based on verified inspection of **{repo_name}** ({len(all_files)} total files discovered):\n",
     ]
 
-    # If asking about architecture / technologies / purpose
-    if any(k in q_lower for k in ["architecture", "overview", "purpose", "technologies", "tech stack", "dependencies", "structure"]):
+    # If asking about architecture / technologies / purpose / overview / what project is about
+    if any(k in q_lower for k in ["architecture", "overview", "purpose", "technologies", "tech stack", "dependencies", "structure", "about", "what is this", "what does this", "tell me about", "explain"]):
         summary_parts.append("#### 📁 Core Structure & Key Files:")
         for f in all_files[:15]:
             summary_parts.append(f"- `{f}`")
@@ -1278,16 +984,57 @@ async def chat_endpoint(
         user_id = current_user.id if current_user else None
         user_repos = [r.repo_name for r in current_user.repositories] if current_user else None
 
+        # Resolve existing conversation and validate ownership
+        chat_session = None
+        if user_id and request.conversation_id:
+            raw_conv_id = str(request.conversation_id).strip()
+            if raw_conv_id.startswith("conv-"):
+                raw_conv_id = raw_conv_id[5:]
+            try:
+                num_id = int(raw_conv_id)
+                chat_session = (
+                    db.query(ChatSession)
+                    .filter(ChatSession.id == num_id, ChatSession.user_id == user_id, ChatSession.is_active == True)
+                    .first()
+                )
+                if not chat_session:
+                    raise HTTPException(status_code=404, detail="Conversation not found or access denied.")
+                # Inherit conversation's bound repository if not specified by client
+                if not current_repo and chat_session.repo_name:
+                    current_repo = chat_session.repo_name
+                elif current_repo and chat_session.repo_name:
+                    # Enforce strict repository-bound conversation association immediately
+                    c_repo = chat_session.repo_name.strip().lower()
+                    r_repo = current_repo.strip().lower()
+                    matches = (
+                        c_repo == r_repo or
+                        c_repo == r_repo.split("/")[-1] or
+                        r_repo == c_repo.split("/")[-1] or
+                        c_repo.endswith("/" + r_repo) or
+                        r_repo.endswith("/" + c_repo)
+                    )
+                    if not matches:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Conversation {chat_session.id} is bound to repository '{chat_session.repo_name}'. Switching repositories requires starting a new conversation."
+                        )
+            except ValueError:
+                # Guest or unpersisted chat ID
+                pass
+
         # Fallback to user's saved selected_repo if client repo is not specified
         if not current_repo and current_user and current_user.settings and current_user.settings.selected_repo:
             current_repo = current_user.settings.selected_repo
 
-        user_gh_token = (
-            request.token
-            or get_user_decrypted_token(current_user)
-            or (current_user.settings.github_token if (current_user and current_user.settings) else None)
-            or os.getenv("GITHUB_TOKEN")
-        )
+        # Strictly use authenticated user's own token if logged in; do NOT fall back to other users or server env
+        if current_user:
+            user_gh_token = (
+                request.token
+                or get_user_decrypted_token(current_user)
+                or (current_user.settings.github_token if (current_user and current_user.settings) else None)
+            )
+        else:
+            user_gh_token = request.token or os.getenv("GITHUB_TOKEN")
 
         # 2. Validate selected repository and access permissions
         is_accessible, access_status, access_msg, repo_info = validate_repository_access(
@@ -1303,6 +1050,23 @@ async def chat_endpoint(
                 "scope": access_status,
                 "references": [],
             }
+
+        # Double check binding with resolved repo_info (e.g. if short name was used)
+        if chat_session and chat_session.repo_name and repo_info:
+            c_repo = chat_session.repo_name.strip().lower()
+            r_repo = repo_info.get("name", "").strip().lower()
+            r_full = repo_info.get("full_name", "").strip().lower()
+            matches = (
+                c_repo == r_repo or
+                c_repo == r_full or
+                c_repo.endswith("/" + r_repo) or
+                r_full.endswith("/" + c_repo)
+            )
+            if not matches:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Conversation {chat_session.id} is bound to repository '{chat_session.repo_name}'. Switching repositories requires starting a new conversation."
+                )
 
         # 3. Resolve active client & models
         active_client = get_gemini_client(request.apiKey)
@@ -1342,6 +1106,24 @@ async def chat_endpoint(
             attached_files=attached_files,
         )
 
+        # Distinguish empty repository
+        if evidence.get("is_empty") or evidence.get("error_category") == "REPOSITORY_EMPTY":
+            return {
+                "reply": evidence.get("error_message") or f"The selected repository '{repo_info['name']}' is empty and contains no files.",
+                "status": "refused",
+                "scope": "REPOSITORY_EMPTY",
+                "references": [],
+            }
+
+        # Distinguish GitHub API rate limit
+        if evidence.get("error_category") == "GITHUB_RATE_LIMITED":
+            return {
+                "reply": "GitHub API rate limit exceeded. Please try again later.",
+                "status": "refused",
+                "scope": "GITHUB_RATE_LIMITED",
+                "references": [],
+            }
+
         if not evidence["has_sufficient_context"] and not attached_files:
             return {
                 "reply": STANDARD_INSUFFICIENT_CONTEXT_MESSAGE,
@@ -1351,29 +1133,16 @@ async def chat_endpoint(
             }
 
         # Save user message to database if user is logged in
-        chat_session = None
-        if user_id:
-            conv_id = request.conversation_id
-            if conv_id is not None:
-                try:
-                    num_id = int(conv_id)
-                    chat_session = (
-                        db.query(ChatSession)
-                        .filter(ChatSession.id == num_id, ChatSession.user_id == user_id, ChatSession.is_active == True)
-                        .first()
-                    )
-                except (ValueError, TypeError):
-                    pass
-
-            if not chat_session:
-                chat_session = ChatSession(
-                    user_id=user_id,
-                    title=user_question[:80],
-                    repo_name=repo_info["name"],
-                    is_active=True,
-                )
-                db.add(chat_session)
-                db.flush()
+        if user_id and not chat_session:
+            bound_repo_name = repo_info["full_name"] if not repo_info.get("is_local") else repo_info["name"]
+            chat_session = ChatSession(
+                user_id=user_id,
+                title=user_question[:80],
+                repo_name=bound_repo_name,
+                is_active=True,
+            )
+            db.add(chat_session)
+            db.flush()
 
             try:
                 user_db_msg = Message(
@@ -1557,8 +1326,12 @@ async def github_repository_endpoint(
             }
         except Exception as e:
             safe_log(f"GitHub repository query error: {e}")
+            raise HTTPException(
+                status_code=404 if "404" in str(e) else 400,
+                detail=f"Failed to query repository '{repo_name}' on GitHub: {str(e)}"
+            )
 
-    # Local workspace inspection
+    # Local workspace inspection (only for local workspace identifier)
     is_local = repo_name.lower() in ("ai-engineering-assistant", "ai_engineering_assistant")
     if is_local:
         local_files = get_all_local_files()
@@ -1574,18 +1347,10 @@ async def github_repository_endpoint(
             "status": "success"
         }
 
-    return {
-        "name": repo_name,
-        "owner": "Unknown",
-        "branch": "main",
-        "language": "Code",
-        "stars": 0,
-        "commits_count": 0,
-        "open_issues_count": 0,
-        "open_prs_count": 0,
-        "status": "disconnected",
-        "message": "GitHub account not connected."
-    }
+    raise HTTPException(
+        status_code=401,
+        detail="GitHub account not connected. Please connect your GitHub account in Integrations Hub."
+    )
 
 
 # 6. POST /api/github/branches
@@ -1608,12 +1373,22 @@ async def github_branches_endpoint(
                 return {"branches": branches, "status": "success"}
         except Exception as e:
             safe_log(f"GitHub branches query error: {e}")
+            raise HTTPException(
+                status_code=404 if "404" in str(e) else 400,
+                detail=f"Failed to fetch branches for '{repo_name}' on GitHub: {str(e)}"
+            )
 
-    # Local workspace git branches fallback
-    return {
-        "branches": ["main"],
-        "status": "success"
-    }
+    is_local = repo_name.lower() in ("ai-engineering-assistant", "ai_engineering_assistant")
+    if is_local:
+        return {
+            "branches": ["main"],
+            "status": "success"
+        }
+
+    raise HTTPException(
+        status_code=401,
+        detail="GitHub account not connected. Please connect your GitHub account in Integrations Hub."
+    )
 
 
 # 7. POST /api/github/pulls (Real Pull Requests)
