@@ -928,8 +928,8 @@ def generate_grounded_offline_summary(user_question: str, repo_name: str, eviden
         f"Based on verified inspection of **{repo_name}** ({len(all_files)} total files discovered):\n",
     ]
 
-    # If asking about architecture / technologies / purpose
-    if any(k in q_lower for k in ["architecture", "overview", "purpose", "technologies", "tech stack", "dependencies", "structure"]):
+    # If asking about architecture / technologies / purpose / overview / what project is about
+    if any(k in q_lower for k in ["architecture", "overview", "purpose", "technologies", "tech stack", "dependencies", "structure", "about", "what is this", "what does this", "tell me about", "explain"]):
         summary_parts.append("#### 📁 Core Structure & Key Files:")
         for f in all_files[:15]:
             summary_parts.append(f"- `{f}`")
@@ -1002,6 +1002,22 @@ async def chat_endpoint(
                 # Inherit conversation's bound repository if not specified by client
                 if not current_repo and chat_session.repo_name:
                     current_repo = chat_session.repo_name
+                elif current_repo and chat_session.repo_name:
+                    # Enforce strict repository-bound conversation association immediately
+                    c_repo = chat_session.repo_name.strip().lower()
+                    r_repo = current_repo.strip().lower()
+                    matches = (
+                        c_repo == r_repo or
+                        c_repo == r_repo.split("/")[-1] or
+                        r_repo == c_repo.split("/")[-1] or
+                        c_repo.endswith("/" + r_repo) or
+                        r_repo.endswith("/" + c_repo)
+                    )
+                    if not matches:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Conversation {chat_session.id} is bound to repository '{chat_session.repo_name}'. Switching repositories requires starting a new conversation."
+                        )
             except ValueError:
                 # Guest or unpersisted chat ID
                 pass
@@ -1010,12 +1026,15 @@ async def chat_endpoint(
         if not current_repo and current_user and current_user.settings and current_user.settings.selected_repo:
             current_repo = current_user.settings.selected_repo
 
-        user_gh_token = (
-            request.token
-            or get_user_decrypted_token(current_user)
-            or (current_user.settings.github_token if (current_user and current_user.settings) else None)
-            or os.getenv("GITHUB_TOKEN")
-        )
+        # Strictly use authenticated user's own token if logged in; do NOT fall back to other users or server env
+        if current_user:
+            user_gh_token = (
+                request.token
+                or get_user_decrypted_token(current_user)
+                or (current_user.settings.github_token if (current_user and current_user.settings) else None)
+            )
+        else:
+            user_gh_token = request.token or os.getenv("GITHUB_TOKEN")
 
         # 2. Validate selected repository and access permissions
         is_accessible, access_status, access_msg, repo_info = validate_repository_access(
@@ -1032,8 +1051,7 @@ async def chat_endpoint(
                 "references": [],
             }
 
-        # 2.1 Enforce strict repository-bound conversation association
-        # Switching repositories MUST create a new chat; reusing an existing chat with another repo is forbidden
+        # Double check binding with resolved repo_info (e.g. if short name was used)
         if chat_session and chat_session.repo_name and repo_info:
             c_repo = chat_session.repo_name.strip().lower()
             r_repo = repo_info.get("name", "").strip().lower()
@@ -1087,6 +1105,24 @@ async def chat_endpoint(
             query=user_question,
             attached_files=attached_files,
         )
+
+        # Distinguish empty repository
+        if evidence.get("is_empty") or evidence.get("error_category") == "REPOSITORY_EMPTY":
+            return {
+                "reply": evidence.get("error_message") or f"The selected repository '{repo_info['name']}' is empty and contains no files.",
+                "status": "refused",
+                "scope": "REPOSITORY_EMPTY",
+                "references": [],
+            }
+
+        # Distinguish GitHub API rate limit
+        if evidence.get("error_category") == "GITHUB_RATE_LIMITED":
+            return {
+                "reply": "GitHub API rate limit exceeded. Please try again later.",
+                "status": "refused",
+                "scope": "GITHUB_RATE_LIMITED",
+                "references": [],
+            }
 
         if not evidence["has_sufficient_context"] and not attached_files:
             return {

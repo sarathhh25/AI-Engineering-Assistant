@@ -134,8 +134,25 @@ export function SidebarLeft({
   }
 
   const currentNav = externalActiveNav || activeNav
-  const pinnedChats = chats.filter((c) => c.isPinned)
-  const unpinnedChats = chats.filter((c) => !c.isPinned)
+
+  // Deduplicate and normalize chats to guarantee unique, persistent keys for all list items
+  const normalizedChats = React.useMemo(() => {
+    const seen = new Set<string>()
+    return chats
+      .filter((c) => {
+        if (!c || !c.id) return false
+        if (seen.has(c.id)) return false
+        seen.add(c.id)
+        return true
+      })
+      .map((c) => ({
+        ...c,
+        group: (c.group === 'Today' || c.group === 'Yesterday' || c.group === 'This Week') ? c.group : ('Today' as const),
+      }))
+  }, [chats])
+
+  const pinnedChats = normalizedChats.filter((c) => c.isPinned)
+  const unpinnedChats = normalizedChats.filter((c) => !c.isPinned)
 
   const timeGroups: ('Today' | 'Yesterday' | 'This Week')[] = ['Today', 'Yesterday', 'This Week']
 
@@ -193,7 +210,7 @@ export function SidebarLeft({
 
           {[
             { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'chat', label: 'Chat Workspace', icon: MessageSquare, badge: chats.length.toString() },
+            { id: 'chat', label: 'Chat Workspace', icon: MessageSquare, badge: normalizedChats.length.toString() },
             { id: 'projects', label: 'Projects', icon: FolderKanban },
             { id: 'repositories', label: 'Repositories', icon: GitBranch },
           ].map((item) => {
@@ -202,7 +219,7 @@ export function SidebarLeft({
 
             return (
               <button
-                key={item.id}
+                key={`nav-${item.id}`}
                 onClick={() => handleNavClick(item.id)}
                 suppressHydrationWarning
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition-all group cursor-pointer ${
@@ -237,7 +254,7 @@ export function SidebarLeft({
         <div className="space-y-3">
           <div className="px-2.5 flex items-center justify-between text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
             <span>Recent Chats</span>
-            <span className="font-mono text-[9px] lowercase">{chats.length} threads</span>
+            <span className="font-mono text-[9px] lowercase">{normalizedChats.length} threads</span>
           </div>
 
           {/* Pinned Chats */}
@@ -250,7 +267,7 @@ export function SidebarLeft({
                 const isSelected = currentNav === 'chat' && externalActiveChatId === chat.id
                 return (
                   <div
-                    key={chat.id}
+                    key={`pinned-${chat.id}`}
                     onClick={() => handleChatClick(chat.id)}
                     className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
                       isSelected
@@ -298,7 +315,7 @@ export function SidebarLeft({
             if (groupChats.length === 0) return null
 
             return (
-              <div key={grp} className="space-y-0.5">
+              <div key={`group-${grp}`} className="space-y-0.5">
                 <div className="px-2.5 py-0.5 text-[9px] font-mono text-muted-foreground/60 uppercase tracking-wider">
                   {grp}
                 </div>
@@ -306,7 +323,7 @@ export function SidebarLeft({
                   const isSelected = currentNav === 'chat' && externalActiveChatId === chat.id
                   return (
                     <div
-                      key={chat.id}
+                      key={`chat-${chat.id}`}
                       onClick={() => handleChatClick(chat.id)}
                       className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-all cursor-pointer text-xs ${
                         isSelected
@@ -368,7 +385,7 @@ export function SidebarLeft({
 
             return (
               <button
-                key={item.id}
+                key={`settings-${item.id}`}
                 onClick={() => handleNavClick(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition-all group cursor-pointer ${
                   isActive

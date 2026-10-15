@@ -23,6 +23,17 @@ import { apiClient, GitHubRepositoryItem } from '@/lib/api-client'
 
 const DEFAULT_CHATS: ChatItem[] = []
 
+function deduplicateChats(items: ChatItem[]): ChatItem[] {
+  const seen = new Set<string>()
+  return (items || []).filter((item) => {
+    if (!item || !item.id) return false
+    const id = String(item.id)
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+}
+
 const WORKSPACE_MODULES = [
   { name: 'AI Engineering Assistant Copilot', desc: 'Core Conversational & Analysis Workspace', tag: 'Full-Stack' },
   { name: 'API Security & Rate Limiter', desc: 'Backend Architecture & Endpoints', tag: 'FastAPI' },
@@ -191,7 +202,7 @@ export function AppShell() {
         if (hasChanges) {
           localStorage.setItem('copilot_chats', JSON.stringify(parsedChats))
         }
-        setChats(parsedChats)
+        setChats(deduplicateChats(parsedChats))
       }
 
       const savedCredits = localStorage.getItem('copilot_credits')
@@ -224,14 +235,16 @@ export function AppShell() {
       if (token) {
         apiClient.getConversations().then((res) => {
           if (res && res.length > 0) {
-            const backendChats: ChatItem[] = res.map((c) => ({
-              id: c.id,
-              title: c.title,
-              timestamp: 'Recently',
-              group: 'Today',
-              isPinned: false,
-              repo_name: c.repo_name,
-            }))
+            const backendChats: ChatItem[] = deduplicateChats(
+              res.map((c) => ({
+                id: String(c.id),
+                title: c.title,
+                timestamp: 'Recently',
+                group: 'Today',
+                isPinned: false,
+                repo_name: c.repo_name,
+              }))
+            )
             setChats(backendChats)
             setActiveChatId((prev) => {
               const selected = prev && backendChats.some((b) => b.id === prev) ? prev : backendChats[0].id
@@ -250,9 +263,10 @@ export function AppShell() {
   }, [])
 
   const updateChatsAndSave = (newChats: ChatItem[]) => {
-    setChats(newChats)
+    const deduped = deduplicateChats(newChats)
+    setChats(deduped)
     try {
-      localStorage.setItem('copilot_chats', JSON.stringify(newChats))
+      localStorage.setItem('copilot_chats', JSON.stringify(deduped))
     } catch (e) {
       console.error('Failed to save chats:', e)
     }
