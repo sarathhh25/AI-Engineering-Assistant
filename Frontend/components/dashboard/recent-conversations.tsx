@@ -4,12 +4,10 @@ import React from 'react'
 import { ConversationItem, ConversationItemData } from './conversation-item'
 
 const CONVERSATIONS: ConversationItemData[] = [
-  { id: 'c1', title: 'Explain the authentication flow', repo: 'ai-engineering-assistant', timestamp: '10m ago' },
-  { id: 'c2', title: 'Why is Sprint 14 delayed?', repo: 'CuriousBees', timestamp: '1h ago' },
-  { id: 'c3', title: 'Review the latest pull request', repo: 'ai-engineering-assistant', timestamp: '2h ago' },
-  { id: 'c4', title: 'Optimize Google Maps route algorithm', repo: 'Google_maps', timestamp: '4h ago' },
-  { id: 'c5', title: 'Generate tests for FastAPI endpoints', repo: 'ai-engineering-assistant', timestamp: '1d ago' },
-  { id: 'c6', title: 'Explain repository architecture', repo: 'Financial-Tracker', timestamp: '2d ago' },
+  { id: 'c1', title: 'Explain the authentication flow', repo: 'AI Engineering Assistant', timestamp: '10m ago' },
+  { id: 'c2', title: 'Review repository security and OAuth tokens', repo: 'AI Engineering Assistant', timestamp: '1h ago' },
+  { id: 'c3', title: 'Review the latest pull request', repo: 'AI Engineering Assistant', timestamp: '2h ago' },
+  { id: 'c4', title: 'Generate tests for FastAPI endpoints', repo: 'AI Engineering Assistant', timestamp: '1d ago' },
 ]
 
 interface RecentConversationsProps {
@@ -19,7 +17,6 @@ interface RecentConversationsProps {
 export function RecentConversations({ onSelectConversation }: RecentConversationsProps) {
   const handleSelect = (chat: ConversationItemData) => {
     if (onSelectConversation) onSelectConversation(chat)
-    else alert(`Opening chat: ${chat.title}`)
   }
 
   return (

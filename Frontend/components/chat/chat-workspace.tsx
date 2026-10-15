@@ -12,6 +12,7 @@ interface ChatWorkspaceProps {
   activeProject?: string
   activeRepo?: string
   onOpenProjects?: () => void
+  onOpenRepos?: () => void
   onOpenSettings?: () => void
   onUpdateChatTitle?: (chatId: string, title: string) => void
 }
@@ -21,6 +22,7 @@ export function ChatWorkspace({
   activeProject = 'AI Engineering Assistant',
   activeRepo = 'ai-engineering-assistant',
   onOpenProjects,
+  onOpenRepos,
   onOpenSettings,
   onUpdateChatTitle,
 }: ChatWorkspaceProps) {
@@ -247,9 +249,9 @@ export function ChatWorkspace({
             {activeRepo || 'No repository selected'}
           </span>
         </div>
-        {onOpenProjects && (
+        {(onOpenRepos || onOpenProjects) && (
           <button
-            onClick={onOpenProjects}
+            onClick={onOpenRepos || onOpenProjects}
             className="text-[11px] text-muted-foreground hover:text-foreground hover:underline cursor-pointer font-sans font-medium"
           >
             Switch Repository →
@@ -302,6 +304,7 @@ export function ChatWorkspace({
         activeProject={activeProject}
         activeRepo={activeRepo}
         onOpenProjects={onOpenProjects}
+        onOpenRepos={onOpenRepos}
       />
     </div>
   )

@@ -48,7 +48,7 @@ export function RepositoryExplorer({
 
   // GitHub Data State
   const [repoDetails, setRepoDetails] = useState<GitHubRepoDetails>({
-    name: activeRepo,
+    name: activeRepo || 'AI-Engineering-Assistant',
     owner: 'Local Workspace',
     branch: 'main',
     language: 'TypeScript / Python',
@@ -59,25 +59,55 @@ export function RepositoryExplorer({
   })
   const [branches, setBranches] = useState<string[]>(['main'])
   const [selectedBranch, setSelectedBranch] = useState('main')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    const target = activeRepo || 'ai-engineering-assistant'
-    apiClient.fetchGitHubRepo(target).then((res) => {
-      if (res) {
-        setRepoDetails(res)
-        setSelectedBranch(res.branch || 'main')
+    const target = (activeRepo && activeRepo.trim()) || 'sarathhh25/AI-Engineering-Assistant'
+    let cancelled = false
+    setIsLoading(true)
+    setError(null)
+
+    Promise.allSettled([
+      apiClient.fetchGitHubRepo(target),
+      apiClient.fetchGitHubBranches(target),
+    ]).then(([repoRes, branchRes]) => {
+      if (cancelled) return
+      setIsLoading(false)
+
+      if (repoRes.status === 'fulfilled' && repoRes.value) {
+        setRepoDetails(repoRes.value)
+        setSelectedBranch(repoRes.value.branch || 'main')
+      } else if (repoRes.status === 'rejected') {
+        const err = repoRes.reason
+        setError(err?.message || `Failed to query repository '${target}' on GitHub.`)
+      }
+
+      if (branchRes.status === 'fulfilled' && branchRes.value && branchRes.value.length > 0) {
+        setBranches(branchRes.value)
       }
     })
-    apiClient.fetchGitHubBranches(target).then((bList) => {
-      if (bList && bList.length > 0) {
-        setBranches(bList)
-      }
-    })
-  }, [activeRepo])
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeRepo, refreshKey])
 
   const showToast = (msg: string) => {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(null), 2500)
+  }
+
+  const handleCopyClone = () => {
+    const owner = repoDetails.owner
+    const name = repoDetails.name || activeRepo
+    const repoPath = owner && owner !== 'Local Workspace' ? `${owner}/${name}` : name
+    const cloneUrl = `https://github.com/${repoPath}.git`
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(`git clone ${cloneUrl}`)
+    }
+    showToast(`Copied clone command: git clone ${cloneUrl}`)
   }
 
   return (
@@ -138,7 +168,9 @@ export function RepositoryExplorer({
               <GitCommit className="size-3 text-primary" /> {repoDetails.commits_count} Commits
             </span>
             <span>•</span>
-            <span className="text-muted-foreground truncate">GitHub Connected (Secure API)</span>
+            <span className="text-muted-foreground truncate">
+              {isLoading ? 'Querying GitHub API...' : 'GitHub Connected (Secure API)'}
+            </span>
           </div>
         </div>
 
@@ -153,8 +185,9 @@ export function RepositoryExplorer({
           </button>
 
           <button
-            onClick={() => showToast('git clone https://github.com/Sarath/ai-engineering-assistant copied!')}
+            onClick={handleCopyClone}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground border border-border transition-colors cursor-pointer"
+            title="Copy git clone command"
           >
             <Download className="size-3.5 text-emerald-500" />
             <span>Clone</span>
@@ -169,14 +202,30 @@ export function RepositoryExplorer({
           </button>
 
           <button
-            onClick={() => showToast('Repository settings opened.')}
+            onClick={() => setRefreshKey((k) => k + 1)}
             className="p-1.5 rounded-xl bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors border border-border cursor-pointer"
-            title="Repository Settings"
+            title="Refresh Repository Data"
           >
             <Settings className="size-4" />
           </button>
         </div>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-mono flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span className="truncate">{error}</span>
+          </div>
+          <button
+            onClick={() => setRefreshKey((k) => k + 1)}
+            className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 font-medium transition-colors cursor-pointer shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Toast Feedback */}
       {toastMsg && (

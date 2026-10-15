@@ -30,6 +30,7 @@ export interface ChatItem {
   timestamp: string
   group: 'Today' | 'Yesterday' | 'This Week'
   isPinned?: boolean
+  repo_name?: string
 }
 
 interface SidebarProps {
@@ -259,7 +260,14 @@ export function SidebarLeft({
                   >
                     <div className="flex items-center gap-2 truncate min-w-0">
                       <MessageSquare className={`size-3 shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                      <span className="truncate text-[11px]">{chat.title}</span>
+                      <div className="flex flex-col truncate min-w-0">
+                        <span className="truncate text-[11px]">{chat.title}</span>
+                        {chat.repo_name && (
+                          <span className="text-[9px] text-muted-foreground/70 font-mono truncate">
+                            {chat.repo_name}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -308,7 +316,14 @@ export function SidebarLeft({
                     >
                       <div className="flex items-center gap-2 truncate min-w-0">
                         <MessageSquare className={`size-3 shrink-0 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                        <span className="truncate text-[11px]">{chat.title}</span>
+                        <div className="flex flex-col truncate min-w-0">
+                          <span className="truncate text-[11px]">{chat.title}</span>
+                          {chat.repo_name && (
+                            <span className="text-[9px] text-muted-foreground/70 font-mono truncate">
+                              {chat.repo_name}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">

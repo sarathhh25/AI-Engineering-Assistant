@@ -484,7 +484,9 @@ async def list_user_repositories(
                 "permissions": r.get("permissions", {}),
             })
 
-        selected = (user.settings.selected_repo if (user and user.settings) else None) or "ai-engineering-assistant"
+        selected = (user.settings.selected_repo if (user and user.settings and user.settings.selected_repo) else None)
+        if not selected and sanitized_repos:
+            selected = sanitized_repos[0]["full_name"]
 
         return {
             "repositories": sanitized_repos,

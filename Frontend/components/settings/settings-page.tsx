@@ -17,6 +17,7 @@ import {
   Sparkles
 } from 'lucide-react'
 import { useUserProfile } from '@/lib/use-user-profile'
+import { apiClient, GitHubRepositoryItem } from '@/lib/api-client'
 
 export interface CopilotSettings {
   language: string
@@ -87,6 +88,15 @@ export function SettingsPage({ initialSection = 'general' }: SettingsPageProps) 
     avatarInitials: 'D',
   }))
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [userRepos, setUserRepos] = useState<Array<{ id: string; name: string }>>([])
+
+  useEffect(() => {
+    apiClient.getGitHubRepositories(1, 50).then((res) => {
+      if (res && res.repositories && res.repositories.length > 0) {
+        setUserRepos(res.repositories.map((r) => ({ id: String(r.id), name: r.full_name || r.name })))
+      }
+    }).catch(() => {})
+  }, [])
 
   // Load settings from localStorage or sync with user profile
   useEffect(() => {
@@ -364,10 +374,15 @@ export function SettingsPage({ initialSection = 'general' }: SettingsPageProps) 
                   onChange={(e) => updateSetting('defaultRepo', e.target.value)}
                   className="w-full bg-secondary border border-border rounded-xl p-2.5 text-foreground outline-none cursor-pointer"
                 >
-                  <option value="ai-engineering-assistant">ai-engineering-assistant</option>
-                  <option value="Google_maps">Google_maps</option>
-                  <option value="CuriousBees">CuriousBees</option>
-                  <option value="Financial-Tracker">Financial-Tracker</option>
+                  {userRepos.length > 0 ? (
+                    userRepos.map((r) => (
+                      <option key={r.id} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value={settings.defaultRepo}>{settings.defaultRepo}</option>
+                  )}
                 </select>
               </div>
 
