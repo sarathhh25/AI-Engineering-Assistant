@@ -109,6 +109,39 @@ _IN_SCOPE_KEYWORDS = [
     "inspect codebase", "codebase structure", "inspect code", "review code", "code review",
     "audit codebase", "scan code", "inspect codebase structure", "review codebase structure",
     "architecture of this repository", "architecture of this project",
+    # Programming languages & frameworks
+    "programming languages", "programming language", "languages and frameworks", "languages & frameworks",
+    "what languages", "which languages", "what frameworks", "which frameworks",
+    "frameworks are used", "frameworks used", "languages used", "tech stack", "technologies used", "technology stack",
+    # Folder and file structure
+    "main folders and files", "main folders", "main files", "folders and files", "files and folders",
+    "folder structure", "directory structure", "file structure", "codebase structure", "project structure",
+    "what does each folder", "what does each file", "what are the folders", "what are the files",
+    "what are the main folders", "what are the main files", "explain folders",
+    # Entry points
+    "entry point", "entry points", "application entry point", "main entry", "starting point",
+    "where does the app start", "where does execution start",
+    # Authentication & security
+    "how does authentication work", "how authentication works", "explain authentication",
+    "how is auth implemented", "authentication flow", "auth flow", "login flow", "how is authentication",
+    # Dependencies
+    "project dependencies", "third party libraries", "external packages", "dependencies used",
+]
+
+# In-Scope Regex Patterns (Questions addressing repository structure, components, entry points, languages)
+_IN_SCOPE_REGEXES = [
+    re.compile(r"\b(?:what|which)\s+(?:programming\s+)?(?:languages?|frameworks?|libraries|tech\s+stack|technologies)\b", re.IGNORECASE),
+    re.compile(r"\b(?:languages?|frameworks?|libraries|tech\s+stack|technologies)\s+(?:are\s+)?used\b", re.IGNORECASE),
+    re.compile(r"\b(?:main\s+)?(?:folders?|directories|files?)\b.*\b(?:do|structure|purpose|overview|contain|work)\b", re.IGNORECASE),
+    re.compile(r"\b(?:folder|directory|file|codebase|project)\s+structure\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+are\s+the\s+(?:main\s+)?(?:folders?|files?|directories)\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+(?:does|do)\s+each\s+(?:folder|file|directory)\s+do\b", re.IGNORECASE),
+    re.compile(r"\b(?:application\s+)?entry\s+points?\b", re.IGNORECASE),
+    re.compile(r"\bwhere\s+(?:is|are)\s+(?:the\s+)?(?:application\s+)?entry\s+points?\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+(?:is|does)\s+this\s+(?:project|repo|repository|codebase|app)\s+(?:about|do)\b", re.IGNORECASE),
+    re.compile(r"\b(?:overview|summary|architecture)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", re.IGNORECASE),
+    re.compile(r"\bhow\s+(?:does\s+)?(?:auth|authentication|login)\s+(?:work|implemented|flow)\b", re.IGNORECASE),
+    re.compile(r"\bexplain\s+(?:how\s+)?(?:auth|authentication|login)\s+works?\b", re.IGNORECASE),
 ]
 
 # Ambiguity Patterns that need clarification unless context/files are present
@@ -195,8 +228,17 @@ def classify_query_rule_based(
         if keyword in q_lower:
             return ScopeDecision.IN_SCOPE
 
-    # 7. Check if query mentions a known file in the repository (e.g., "main.py", "route.ts")
+    # 7. Check for structured in-scope regex patterns
+    for regex in _IN_SCOPE_REGEXES:
+        if regex.search(clean_q):
+            return ScopeDecision.IN_SCOPE
+
+    # 8. Check if query mentions a known file or top-level directory in the repository
     if known_repo_files:
+        top_dirs = {f.split("/")[0].lower() for f in known_repo_files if "/" in f and not f.startswith(".")}
+        for td in top_dirs:
+            if len(td) >= 3 and re.search(rf"\b{re.escape(td)}\b", q_lower):
+                return ScopeDecision.IN_SCOPE
         words = re.findall(r"[\w\./\-]+\.\w+", clean_q)
         for w in words:
             w_norm = w.replace("\\", "/").lower()
@@ -224,7 +266,7 @@ def classify_query_with_llm(
         # Fail closed if no client available
         return ScopeDecision.OUT_OF_SCOPE
 
-    files_preview = ", ".join(file_sample[:25]) if file_sample else "Standard repository files"
+    files_preview = ", ".join(file_sample[:30]) if file_sample else "Standard repository files"
     classification_prompt = f"""You are a strict security and repository scope classifier for an AI Engineering Assistant connected to repository '{repo_name}' ({repo_language}).
 
 KNOWN REPOSITORY FILES (sample):
@@ -235,9 +277,9 @@ USER QUERY:
 
 TASK:
 Determine if the USER QUERY is asking about the connected repository '{repo_name}'.
-- IN_SCOPE: The question is about this repository's code, architecture, files, dependencies, endpoints, bugs, configuration, features, or how a concept/technology is used within this project.
-- OUT_OF_SCOPE: The question asks for general knowledge, trivia, real-world events, jokes, poems, general programming tutorials from scratch (e.g., "What is Python?", "Tell me a joke"), or unrelated coding tasks.
-- NEEDS_CLARIFICATION: The question is potentially about this repository but is ambiguous or missing context (e.g., "Why is it failing?", "How can I improve this?") without referencing a specific component, file, or error.
+- IN_SCOPE: The question is about this repository's code, architecture, files, folders, dependencies, entry points, endpoints, bugs, configuration, features, languages, frameworks, or how a concept/technology is used within this project. Note: In an active repository session, inquiries like "What are the main folders and files?", "Where is the application entry point?", or "What programming languages and frameworks are used?" refer directly to the selected repository and are IN_SCOPE.
+- OUT_OF_SCOPE: The question asks for general non-repository knowledge, real-world trivia, world events, election results, sports, jokes, poems, recipes, general programming tutorials from scratch (e.g. "What is the capital of India?", "Tell me a joke", "What is Python?", "Teach me Python from scratch"), or tasks about completely different external software.
+- NEEDS_CLARIFICATION: The question is potentially about this repository but is ambiguous with zero context (e.g., "Why is it failing?", "How can I improve this?") without referencing a specific component, file, or error.
 
 CRITICAL INSTRUCTIONS:
 1. Do NOT answer the user query.
@@ -246,27 +288,31 @@ CRITICAL INSTRUCTIONS:
 {{"classification": "IN_SCOPE" | "OUT_OF_SCOPE" | "NEEDS_CLARIFICATION", "reason": "brief explanation"}}
 """
 
-    try:
-        from google.genai import types
-        response = client.models.generate_content(
-            model=model_name,
-            contents=classification_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.0,
+    models_to_try = [model_name, "gemini-3.6-flash", "gemini-flash-latest", "gemini-3.7-flash"]
+    seen_models = set()
+    candidate_list = [m for m in models_to_try if not (m in seen_models or seen_models.add(m))]
+
+    for m_name in candidate_list:
+        try:
+            from google.genai import types
+            response = client.models.generate_content(
+                model=m_name,
+                contents=classification_prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                )
             )
-        )
-        if response and response.text:
-            text = response.text.strip()
-            # Extract JSON block
-            match = re.search(r"\{[\s\S]*\}", text)
-            if match:
-                data = json.loads(match.group(0))
-                decision = data.get("classification", "").upper().strip()
-                if decision in ("IN_SCOPE", "OUT_OF_SCOPE", "NEEDS_CLARIFICATION"):
-                    return ScopeDecision(decision)
-    except Exception as e:
-        # Fail closed on any exception
-        pass
+            if response and response.text:
+                text = response.text.strip()
+                # Extract JSON block
+                match = re.search(r"\{[\s\S]*\}", text)
+                if match:
+                    data = json.loads(match.group(0))
+                    decision = data.get("classification", "").upper().strip()
+                    if decision in ("IN_SCOPE", "OUT_OF_SCOPE", "NEEDS_CLARIFICATION"):
+                        return ScopeDecision(decision)
+        except Exception:
+            continue
 
     # Fail closed fallback
     return ScopeDecision.OUT_OF_SCOPE

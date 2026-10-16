@@ -31,6 +31,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 # Database engine & session
 # ---------------------------------------------------------------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL and "@localhost:" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("@localhost:", "@127.0.0.1:")
 if not DATABASE_URL:
     env = (os.getenv("NODE_ENV") or os.getenv("ENVIRONMENT") or "development").lower()
     if env in ("production", "prod"):
