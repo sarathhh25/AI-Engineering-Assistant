@@ -1026,6 +1026,12 @@ async def chat_endpoint(
         if not current_repo and current_user and current_user.settings and current_user.settings.selected_repo:
             current_repo = current_user.settings.selected_repo
 
+        user_gh_login = current_user.settings.github_username if (current_user and current_user.settings) else None
+        safe_log(
+            f"[Diagnostics] Chat Request | User ID: {user_id} | "
+            f"GitHub Login: {user_gh_login} | Target Repo: '{current_repo}'"
+        )
+
         # Strictly use authenticated user's own token if logged in; do NOT fall back to other users or server env
         if current_user:
             user_gh_token = (
@@ -1041,6 +1047,17 @@ async def chat_endpoint(
             repo_name=current_repo,
             github_token=user_gh_token,
             user_repositories=user_repos,
+        )
+
+        repo_owner = repo_info.get("owner") if repo_info else None
+        repo_id = repo_info.get("id") if repo_info else None
+        repo_name_val = repo_info.get("name") if repo_info else current_repo
+        default_branch = repo_info.get("default_branch") if repo_info else "unknown"
+
+        safe_log(
+            f"[Diagnostics] Access Check Result: {access_status} | "
+            f"Repo Owner: {repo_owner} | Repo Name: {repo_name_val} | Repo ID: {repo_id} | "
+            f"Default Branch: {default_branch}"
         )
 
         if not is_accessible:
@@ -1081,6 +1098,8 @@ async def chat_endpoint(
             client=active_client,
         )
 
+        safe_log(f"[Diagnostics] Scope Classification: {decision.value} for query: '{user_question[:60]}'")
+
         # Case B: General questions unrelated to the repository -> Refuse
         if decision == ScopeDecision.OUT_OF_SCOPE:
             return {
@@ -1106,6 +1125,16 @@ async def chat_endpoint(
             attached_files=attached_files,
         )
 
+        tree_count = len(evidence.get("all_files", []))
+        files_fetched = len(evidence.get("references", []))
+        evidence_bytes = len(evidence.get("evidence_text", "").encode("utf-8"))
+        safe_log(
+            f"[Diagnostics] Evidence Retrieved | Tree Entries: {tree_count} | "
+            f"Files Fetched: {files_fetched} | Evidence Size: {evidence_bytes} bytes | "
+            f"Sufficient Context: {evidence.get('has_sufficient_context')} | "
+            f"Error Category: {evidence.get('error_category') or 'None'}"
+        )
+
         # Distinguish empty repository
         if evidence.get("is_empty") or evidence.get("error_category") == "REPOSITORY_EMPTY":
             return {
@@ -1125,6 +1154,16 @@ async def chat_endpoint(
             }
 
         if not evidence["has_sufficient_context"] and not attached_files:
+            error_cat = evidence.get("error_category")
+            detail_msg = evidence.get("error_message")
+            safe_log(f"[Diagnostics] Insufficient context for repo '{repo_info['name']}'. ErrorCat={error_cat}, Detail={detail_msg}")
+            if error_cat == "GITHUB_API_ERROR" and detail_msg:
+                return {
+                    "reply": f"Repository access succeeded, but file retrieval failed: {detail_msg}",
+                    "status": "error",
+                    "scope": "FILE_RETRIEVAL_ERROR",
+                    "references": [],
+                }
             return {
                 "reply": STANDARD_INSUFFICIENT_CONTEXT_MESSAGE,
                 "status": "refused",
@@ -1215,6 +1254,13 @@ USER INQUIRY:
                 repo_name=repo_info["name"],
                 evidence=evidence,
             )
+
+        safe_log(
+            f"[Diagnostics] AI Response Generation: {'Gemini' if (active_client and reply_text and _working_gemini_model) else 'Offline Grounded'} | "
+            f"Model: {_working_gemini_model or 'offline_grounded'} | "
+            f"Status: {'SUCCESS' if reply_text else 'EMPTY'} | "
+            f"References: {len(referenced_files)}"
+        )
 
         # Save AI response to DB if session exists
         if chat_session and user_id and reply_text:

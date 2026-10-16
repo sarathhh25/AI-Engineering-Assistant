@@ -146,6 +146,93 @@ ENTRY_POINT_CANDIDATES = [
 ]
 
 
+import time
+
+_TREE_CACHE: Dict[str, Tuple[float, List[str], str]] = {}
+_FILE_CONTENT_CACHE: Dict[str, Tuple[float, str]] = {}
+CACHE_TTL = 300.0  # 5 minutes in-memory cache
+
+
+def get_remote_repo_tree_and_sha(repo_obj: Any) -> Tuple[List[str], str, Optional[str], Optional[str]]:
+    """
+    Retrieves all blob paths in the default branch of a GitHub repository with caching.
+    Returns (all_files, commit_sha, error_category, error_message).
+    """
+    now = time.time()
+    repo_full_name = getattr(repo_obj, 'full_name', '') or getattr(repo_obj, 'name', '')
+
+    # Check for empty repository
+    if getattr(repo_obj, 'size', None) == 0 and not getattr(repo_obj, 'default_branch', None):
+        return [], "", "REPOSITORY_EMPTY", f"The selected repository '{repo_obj.name}' is empty and contains no files."
+
+    default_branch_name = getattr(repo_obj, 'default_branch', None) or "main"
+
+    commit_sha = ""
+    try:
+        branch = repo_obj.get_branch(default_branch_name)
+        commit_sha = getattr(getattr(branch, 'commit', None), 'sha', '') or default_branch_name
+    except Exception:
+        commit_sha = default_branch_name
+
+    cache_key = f"{repo_full_name}:{commit_sha}"
+    if cache_key in _TREE_CACHE:
+        cached_time, cached_files, _ = _TREE_CACHE[cache_key]
+        if now - cached_time < CACHE_TTL:
+            return cached_files, commit_sha, None, None
+
+    try:
+        tree = repo_obj.get_git_tree(commit_sha or default_branch_name, recursive=True)
+        all_files = [item.path for item in tree.tree if item.type == 'blob']
+        _TREE_CACHE[cache_key] = (now, all_files, commit_sha)
+        return all_files, commit_sha, None, None
+    except GithubException as ge:
+        status = ge.status
+        msg_str = str(ge).lower()
+        if isinstance(getattr(ge, 'data', None), dict):
+            msg_str += " " + str(ge.data.get('message', '')).lower()
+        if status == 409 or "empty" in msg_str:
+            return [], commit_sha, "REPOSITORY_EMPTY", f"The selected repository '{repo_obj.name}' is empty and contains no files."
+        elif status == 403 and "rate limit" in msg_str:
+            return [], commit_sha, "GITHUB_RATE_LIMITED", "GitHub API rate limit exceeded while retrieving repository contents."
+        elif status == 404:
+            return [], commit_sha, "REPOSITORY_NOT_FOUND", f"Repository '{repo_obj.name}' was not found on GitHub."
+        elif status == 403:
+            return [], commit_sha, "REPOSITORY_ACCESS_FORBIDDEN", f"Access forbidden: your connected GitHub account does not have permission to view '{repo_obj.name}'."
+        else:
+            return [], commit_sha, "GITHUB_API_ERROR", f"GitHub API error while accessing '{repo_obj.name}': {ge}"
+    except Exception as ex:
+        if "rate limit" in str(ex).lower():
+            return [], commit_sha, "GITHUB_RATE_LIMITED", "GitHub API rate limit exceeded while retrieving repository contents."
+        return [], commit_sha, "REPOSITORY_ACCESS_ERROR", f"Repository access failed for '{repo_obj.name}': {ex}"
+
+
+def get_remote_file_content_cached(repo_obj: Any, file_path: str, commit_sha: str = "") -> Optional[str]:
+    """Safely fetches and caches file content from GitHub without failing on encoding or size limits."""
+    now = time.time()
+    repo_full_name = getattr(repo_obj, 'full_name', '') or getattr(repo_obj, 'name', '')
+    cache_key = f"{repo_full_name}:{file_path}:{commit_sha}"
+    if cache_key in _FILE_CONTENT_CACHE:
+        cached_time, cached_content = _FILE_CONTENT_CACHE[cache_key]
+        if now - cached_time < CACHE_TTL:
+            return cached_content
+
+    try:
+        f_obj = repo_obj.get_contents(file_path)
+        content_str = None
+        if hasattr(f_obj, 'decoded_content') and f_obj.decoded_content:
+            content_str = f_obj.decoded_content.decode('utf-8', errors='replace')
+        elif hasattr(f_obj, 'content') and f_obj.content:
+            import base64
+            content_str = base64.b64decode(f_obj.content).decode('utf-8', errors='replace')
+
+        if content_str is not None:
+            _FILE_CONTENT_CACHE[cache_key] = (now, content_str)
+            return content_str
+    except Exception as err:
+        safe_log(f"[RepositoryService] Error reading file '{file_path}': {err}")
+    return None
+
+
 def validate_repository_access(
     repo_name: Optional[str],
     github_token: Optional[str] = None,
@@ -153,14 +240,7 @@ def validate_repository_access(
 ) -> Tuple[bool, str, str, Optional[Dict[str, Any]]]:
     """
     Validates whether the selected repository exists and is accessible.
-    Distinguishes:
-    - REPOSITORY_NOT_CONNECTED: No repository selected or no token provided.
-    - GITHUB_AUTH_FAILED (401): Invalid or expired token.
-    - REPOSITORY_ACCESS_FORBIDDEN (403): User lacks permission.
-    - GITHUB_RATE_LIMITED: GitHub API rate limits exceeded.
-    - REPOSITORY_NOT_FOUND (404): Repo does not exist on GitHub.
-    - REPOSITORY_EMPTY: Repo exists but has no commits or files.
-    - GITHUB_API_ERROR: Other network or GitHub API errors.
+    Resolves repository owner, name, stable ID, default branch, visibility, and pre-populates file tree.
     Returns: (is_accessible, status_code, message, repo_info_dict)
     """
     if not repo_name or not str(repo_name).strip() or str(repo_name).strip().lower() in ("none", "null", "undefined"):
@@ -195,10 +275,13 @@ def validate_repository_access(
             "",
             {
                 "is_local": True,
+                "id": 0,
+                "owner": "local",
                 "name": clean_name,
                 "full_name": f"workspace/{clean_name}",
                 "default_branch": "main",
                 "language": "TypeScript / Python",
+                "private": True,
                 "all_files": all_files,
             },
         )
@@ -254,7 +337,34 @@ def validate_repository_access(
                 None,
             )
 
-        safe_log(f"[RepositoryService] Validated repository '{repo_obj.full_name}' (private={repo_obj.private})")
+        # Fetch tree early to populate all_files for scope classification and diagnostics
+        all_files, commit_sha, err_cat, err_msg = get_remote_repo_tree_and_sha(repo_obj)
+        if err_cat == "REPOSITORY_EMPTY":
+            return (
+                False,
+                "REPOSITORY_EMPTY",
+                err_msg or f"The selected repository '{clean_name}' is empty and contains no files.",
+                None,
+            )
+        elif err_cat == "GITHUB_RATE_LIMITED":
+            return (
+                False,
+                "GITHUB_RATE_LIMITED",
+                err_msg or "GitHub API rate limit exceeded. Please try again later.",
+                None,
+            )
+        elif err_cat in ("REPOSITORY_ACCESS_FORBIDDEN", "REPOSITORY_NOT_FOUND"):
+            return (
+                False,
+                err_cat,
+                err_msg or f"Access failed for repository '{clean_name}'.",
+                None,
+            )
+
+        owner_login = getattr(getattr(repo_obj, 'owner', None), 'login', None) or (repo_obj.full_name.split('/')[0] if '/' in repo_obj.full_name else '')
+        repo_id = getattr(repo_obj, 'id', None)
+
+        safe_log(f"[RepositoryService] Validated repository '{repo_obj.full_name}' (id={repo_id}, owner={owner_login}, private={getattr(repo_obj, 'private', False)}, files={len(all_files)})")
 
         return (
             True,
@@ -262,10 +372,15 @@ def validate_repository_access(
             "",
             {
                 "is_local": False,
+                "id": repo_id,
+                "owner": owner_login,
                 "name": repo_obj.name,
                 "full_name": repo_obj.full_name,
                 "default_branch": repo_obj.default_branch or "main",
                 "language": repo_obj.language or "Unknown",
+                "private": getattr(repo_obj, "private", False),
+                "all_files": all_files,
+                "commit_sha": commit_sha,
                 "repo_obj": repo_obj,
             },
         )
@@ -344,7 +459,8 @@ def retrieve_repository_evidence(
     """
     is_local = repo_info.get("is_local", False)
     repo_name = repo_info.get("name", "")
-    all_files: List[str] = repo_info.get("all_files", [])
+    all_files: List[str] = list(repo_info.get("all_files", []))
+    commit_sha: str = repo_info.get("commit_sha", "")
     references: List[str] = []
     evidence_blocks: List[str] = []
     error_category: Optional[str] = None
@@ -353,7 +469,7 @@ def retrieve_repository_evidence(
 
     clean_q = query.lower()
 
-    # Broad project-level inquiry patterns
+    # Broad project-level inquiry patterns (covers overview, languages, frameworks, folders, files, entry points, architecture)
     broad_phrases = [
         "what is this project about", "what is this repo about", "what is this codebase about", "what is this app about",
         "what's this project about", "what's this repo about", "what's this codebase about", "what's this app about",
@@ -361,16 +477,27 @@ def retrieve_repository_evidence(
         "tell me about this project", "tell me about this repo", "tell me about this codebase", "tell me about this app",
         "explain this project", "explain this repo", "explain this codebase", "explain this app",
         "project overview", "repo overview", "codebase overview", "architecture of this", "architecture",
-        "technologies used", "technologies are used", "tech stack", "summary of the project", "dependencies",
+        "technologies used", "technologies are used", "tech stack", "technology stack", "summary of the project", "dependencies",
         "overview of the project", "overview of this project", "overview of the repo", "overview of this repo",
+        "programming languages", "programming language", "languages and frameworks", "languages & frameworks",
+        "what languages", "which languages", "what frameworks", "which frameworks", "frameworks used", "languages used",
+        "main folders", "main files", "folders and files", "files and folders", "folder structure", "directory structure",
+        "file structure", "codebase structure", "what does each folder do", "what does each file do",
+        "what are the main folders", "what are the main files", "explain folders",
+        "entry point", "entry points", "application entry point", "main entry", "where does the app start",
+        "how does authentication work", "how is authentication implemented", "authentication flow", "auth flow",
     ]
     is_broad = any(bp in clean_q for bp in broad_phrases) or bool(
         re.search(r"\bwhat\s+(?:is|does)\s+this\s+(?:project|repo|repository|codebase|app)\s+(?:about|do)\b", clean_q)
     ) or bool(
-        re.search(r"\b(?:overview|summary|architecture)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
+        re.search(r"\b(?:overview|summary|architecture|structure)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
     ) or bool(
         re.search(r"\btell\s+me\s+about\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
+    ) or bool(
+        re.search(r"\b(?:languages?|frameworks?|folders?|files?|directories|entry\s+points?)\b", clean_q)
     )
+
+    targeted_files: List[str] = []
 
     if is_local:
         # 1. Dependency telemetry
@@ -395,13 +522,13 @@ def retrieve_repository_evidence(
                 targeted_files.append(file_path)
 
         if not targeted_files:
-            if "auth" in clean_q:
+            if "auth" in clean_q or "login" in clean_q:
                 targeted_files.extend([f for f in all_files if "auth" in f.lower() or "session" in f.lower()][:3])
             if "database" in clean_q or "db" in clean_q or "sql" in clean_q:
                 targeted_files.extend([f for f in all_files if "database" in f.lower() or "postgres" in f.lower()][:3])
             if "chat" in clean_q or "message" in clean_q:
                 targeted_files.extend([f for f in all_files if "chat" in f.lower()][:3])
-            if "main" in clean_q or "endpoint" in clean_q or "api" in clean_q:
+            if "main" in clean_q or "endpoint" in clean_q or "api" in clean_q or "entry" in clean_q:
                 targeted_files.extend([f for f in all_files if "main.py" in f.lower() or "route.ts" in f.lower()][:3])
 
         # If broad question, include core entry points
@@ -421,36 +548,13 @@ def retrieve_repository_evidence(
         # Remote GitHub repository
         repo_obj = repo_info.get("repo_obj")
         if repo_obj:
-            try:
-                tree = repo_obj.get_git_tree(repo_obj.default_branch, recursive=True)
-                all_files = [item.path for item in tree.tree if item.type == 'blob']
-            except GithubException as ge:
-                status = ge.status
-                msg_str = str(ge).lower()
-                if status == 409 or "empty" in msg_str:
-                    is_empty = True
-                    error_category = "REPOSITORY_EMPTY"
-                    error_message = f"The selected repository '{repo_name}' is empty and contains no files."
-                elif status == 403 and "rate limit" in msg_str:
-                    error_category = "GITHUB_RATE_LIMITED"
-                    error_message = "GitHub API rate limit exceeded while retrieving repository contents."
-                else:
-                    safe_log(f"[RepositoryService] Tree retrieval error for '{repo_name}': {ge}")
-                    error_category = "GITHUB_API_ERROR"
-                    error_message = f"Failed to retrieve repository file tree: {ge}"
-                all_files = []
-            except Exception as ex:
-                if "rate limit" in str(ex).lower():
-                    error_category = "GITHUB_RATE_LIMITED"
-                    error_message = "GitHub API rate limit exceeded while retrieving repository contents."
-                else:
-                    safe_log(f"[RepositoryService] Tree retrieval error for '{repo_name}': {ex}")
-                all_files = []
+            if not all_files:
+                all_files, commit_sha, error_category, error_message = get_remote_repo_tree_and_sha(repo_obj)
 
-            safe_log(f"[RepositoryService] Retrieved tree for '{repo_name}': {len(all_files)} files (error_cat={error_category})")
+            safe_log(f"[RepositoryService] Using tree for '{repo_name}': {len(all_files)} files (error_cat={error_category})")
 
             # Handle empty repository early
-            if is_empty or (len(all_files) == 0 and error_category == "REPOSITORY_EMPTY"):
+            if is_empty or len(all_files) == 0 or error_category == "REPOSITORY_EMPTY":
                 return {
                     "repo_name": repo_name,
                     "language": repo_info.get("language", "Unknown"),
@@ -486,39 +590,32 @@ def retrieve_repository_evidence(
                 references.append("@README.md")
                 readme_found = True
             except Exception:
-                # Look for alternative readme filenames in all_files
                 alt_readme = next((f for f in all_files if os.path.basename(f).lower() in ("readme.md", "readme.txt", "readme.rst", "readme")), None)
                 if alt_readme:
-                    try:
-                        f_obj = repo_obj.get_contents(alt_readme)
-                        lines = f_obj.decoded_content.decode('utf-8', errors='replace').splitlines()[:80]
+                    alt_text = get_remote_file_content_cached(repo_obj, alt_readme, commit_sha)
+                    if alt_text:
+                        lines = alt_text.splitlines()[:80]
                         evidence_blocks.append(f"=== File: {alt_readme} ===\n" + "\n".join(lines))
                         references.append(f"@{alt_readme}")
                         readme_found = True
-                    except Exception:
-                        pass
 
-            # 2. Fetch Multi-Ecosystem Manifests (up to 4 manifests across project)
+            # 2. Fetch Multi-Ecosystem Manifests (up to 5 manifests across project)
             manifests_retrieved = 0
             for cand in MANIFEST_CANDIDATES:
-                if manifests_retrieved >= 4:
+                if manifests_retrieved >= 5:
                     break
                 cand_lower = cand.lower()
                 matched_mf = next((f for f in all_files if f.lower() == cand_lower or f.lower().endswith("/" + cand_lower)), None)
                 if matched_mf and f"@{matched_mf}" not in references:
-                    try:
-                        mf_obj = repo_obj.get_contents(matched_mf)
-                        if hasattr(mf_obj, 'decoded_content'):
-                            mf_text = mf_obj.decoded_content.decode('utf-8', errors='replace')
-                            mf_lines = mf_text.splitlines()[:50]
-                            evidence_blocks.append(f"=== Manifest: {matched_mf} ===\n" + "\n".join(mf_lines))
-                            references.append(f"@{matched_mf}")
-                            manifests_retrieved += 1
-                    except Exception as mf_err:
-                        safe_log(f"Failed to fetch manifest '{matched_mf}': {mf_err}")
+                    mf_text = get_remote_file_content_cached(repo_obj, matched_mf, commit_sha)
+                    if mf_text:
+                        mf_lines = mf_text.splitlines()[:60]
+                        evidence_blocks.append(f"=== Manifest: {matched_mf} ===\n" + "\n".join(mf_lines))
+                        references.append(f"@{matched_mf}")
+                        manifests_retrieved += 1
 
-            # 3. Fetch Entry-Point Source Files (especially crucial when README is missing or inquiry is broad)
-            if not readme_found or is_broad:
+            # 3. Fetch Entry-Point Source Files (crucial when README is missing or broad/entry query)
+            if not readme_found or is_broad or any(k in clean_q for k in ["entry", "main", "start", "folder", "file"]):
                 entry_points_retrieved = 0
                 for ep in ENTRY_POINT_CANDIDATES:
                     if entry_points_retrieved >= 3:
@@ -526,51 +623,61 @@ def retrieve_repository_evidence(
                     ep_lower = ep.lower()
                     matched_ep = next((f for f in all_files if f.lower() == ep_lower or f.lower().endswith("/" + ep_lower)), None)
                     if matched_ep and f"@{matched_ep}" not in references and not any(r.startswith(f"@{matched_ep}:") for r in references):
-                        try:
-                            ep_obj = repo_obj.get_contents(matched_ep)
-                            if hasattr(ep_obj, 'decoded_content'):
-                                ep_text = ep_obj.decoded_content.decode('utf-8', errors='replace')
-                                lines = ep_text.splitlines()[:MAX_EVIDENCE_LINES]
-                                formatted = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines))
-                                line_tag = f"L1-{len(lines)}"
-                                evidence_blocks.append(f"=== Entry Point File: {matched_ep} ===\n{formatted}")
-                                references.append(f"@{matched_ep}:{line_tag}")
-                                entry_points_retrieved += 1
-                        except Exception as ep_err:
-                            safe_log(f"Failed to fetch entry point '{matched_ep}': {ep_err}")
+                        ep_text = get_remote_file_content_cached(repo_obj, matched_ep, commit_sha)
+                        if ep_text:
+                            lines = ep_text.splitlines()[:MAX_EVIDENCE_LINES]
+                            formatted = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines))
+                            line_tag = f"L1-{len(lines)}"
+                            evidence_blocks.append(f"=== Entry Point File: {matched_ep} ===\n{formatted}")
+                            references.append(f"@{matched_ep}:{line_tag}")
+                            entry_points_retrieved += 1
 
-            # 4. Fetch target files mentioned in query or matching specific concepts
-            targeted = [f for f in all_files if os.path.basename(f).lower() in clean_q][:3]
-            if not targeted:
-                if "auth" in clean_q or "login" in clean_q:
-                    targeted.extend([f for f in all_files if "auth" in f.lower() or "session" in f.lower()][:2])
-                if "api" in clean_q or "route" in clean_q or "controller" in clean_q:
-                    targeted.extend([f for f in all_files if "route" in f.lower() or "controller" in f.lower() or "service" in f.lower()][:2])
-                if "database" in clean_q or "db" in clean_q or "model" in clean_q or "schema" in clean_q:
-                    targeted.extend([f for f in all_files if "model" in f.lower() or "schema" in f.lower()][:2])
-                if "crypto" in clean_q or "encryption" in clean_q:
-                    targeted.extend([f for f in all_files if "crypto" in f.lower() or "encrypt" in f.lower()][:2])
-                if "chat" in clean_q or "message" in clean_q:
-                    targeted.extend([f for f in all_files if "chat" in f.lower() or "message" in f.lower()][:2])
+            # 4. Filter non-code directories and discover query-targeted source code
+            non_code_prefixes = ('.git/', '.agents/', '.claude/', '.idea/', '.vscode/', 'node_modules/', 'gradle/')
+            code_files = [f for f in all_files if not any(f.startswith(p) for p in non_code_prefixes)]
 
-            for tf in list(dict.fromkeys(targeted))[:3]:
+            targeted_files: List[str] = []
+
+            # 4a. If asking about folders & files, pick 1 representative file from each distinct top-level code directory
+            if any(k in clean_q for k in ["folder", "file", "directory", "structure", "each one do", "main folder"]):
+                top_level_dirs = sorted(list(set(f.split('/')[0] for f in code_files if '/' in f)))[:6]
+                for tld in top_level_dirs:
+                    rep_file = next((f for f in code_files if f.startswith(tld + '/') and f.endswith(('.kt', '.java', '.ts', '.tsx', '.js', '.py', '.go', '.rs', '.json'))), None)
+                    if rep_file and f"@{rep_file}" not in references and not any(r.startswith(f"@{rep_file}:") for r in references):
+                        targeted_files.append(rep_file)
+
+            # 4b. Match direct file mentions in query
+            for f in code_files:
+                base_f = os.path.basename(f).lower()
+                if len(base_f) > 3 and base_f in clean_q:
+                    targeted_files.append(f)
+
+            # 4c. Concept targeted discovery in actual code files
+            if "auth" in clean_q or "login" in clean_q:
+                targeted_files.extend([f for f in code_files if any(w in f.lower() for w in ["login", "auth", "session", "key", "user"])][:3])
+            if "api" in clean_q or "route" in clean_q or "endpoint" in clean_q or "controller" in clean_q:
+                targeted_files.extend([f for f in code_files if any(w in f.lower() for w in ["route", "controller", "service", "endpoint", "api"])][:3])
+            if "database" in clean_q or "db" in clean_q or "model" in clean_q or "schema" in clean_q:
+                targeted_files.extend([f for f in code_files if any(w in f.lower() for w in ["model", "schema", "entity", "dao", "firestore", "db"])][:3])
+            if "crypto" in clean_q or "encryption" in clean_q:
+                targeted_files.extend([f for f in code_files if any(w in f.lower() for w in ["crypto", "encrypt", "key"])][:3])
+            if "chat" in clean_q or "message" in clean_q:
+                targeted_files.extend([f for f in code_files if any(w in f.lower() for w in ["chat", "message"])][:3])
+
+            for tf in list(dict.fromkeys(targeted_files))[:4]:
                 if f"@{tf}" in references or any(r.startswith(f"@{tf}:") for r in references):
                     continue
-                try:
-                    file_obj = repo_obj.get_contents(tf)
-                    if hasattr(file_obj, 'decoded_content'):
-                        raw_content = file_obj.decoded_content.decode('utf-8', errors='replace')
-                        lines = raw_content.splitlines()[:MAX_EVIDENCE_LINES]
-                        formatted = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines))
-                        evidence_blocks.append(f"=== File: {tf} ===\n{formatted}")
-                        references.append(f"@{tf}:L1-{len(lines)}")
-                except Exception:
-                    pass
+                raw_content = get_remote_file_content_cached(repo_obj, tf, commit_sha)
+                if raw_content:
+                    lines = raw_content.splitlines()[:MAX_EVIDENCE_LINES]
+                    formatted = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines))
+                    evidence_blocks.append(f"=== File: {tf} ===\n{formatted}")
+                    references.append(f"@{tf}:L1-{len(lines)}")
 
             # 5. Add Repository Tree Layout Summary to evidence
             if all_files:
-                top_level = sorted(list(set(f.split('/')[0] for f in all_files if '/' in f)))[:12]
-                root_files = [f for f in all_files if '/' not in f][:12]
+                top_level = sorted(list(set(f.split('/')[0] for f in all_files if '/' in f)))[:15]
+                root_files = [f for f in all_files if '/' not in f][:15]
                 overview_text = (
                     f"=== Repository File Tree Overview ===\n"
                     f"Repository: {repo_name}\n"
@@ -596,10 +703,10 @@ def retrieve_repository_evidence(
     elif len(all_files) == 0:
         has_sufficient_context = False
     elif is_broad and bool(evidence_blocks):
-        # A broad overview query has sufficient context if we retrieved manifests, entry points, or file structure
+        # A broad overview, languages, frameworks, folders, or entry point inquiry has sufficient context
         has_sufficient_context = True
     else:
-        has_targeted = bool(targeted_files if is_local else targeted)
+        has_targeted = bool(targeted_files)
         # Check if non-generic query keywords appear in retrieved evidence
         stopwords = {
             "where", "which", "what", "how", "does", "this", "that", "from", "with",
