@@ -85,6 +85,11 @@ try:
         retrieve_repository_evidence,
         format_security_quarantine,
         read_local_file_with_lines,
+        fetch_repository_branches,
+        fetch_repository_tree,
+        fetch_repository_file_content,
+        fetch_repository_commits,
+        clear_repository_caches,
     )
     from Backend.github_service import (
         create_authorization_url,
@@ -112,6 +117,11 @@ except ImportError:
             retrieve_repository_evidence,
             format_security_quarantine,
             read_local_file_with_lines,
+            fetch_repository_branches,
+            fetch_repository_tree,
+            fetch_repository_file_content,
+            fetch_repository_commits,
+            clear_repository_caches,
         )
         from .github_service import (
             create_authorization_url,
@@ -138,6 +148,11 @@ except ImportError:
             retrieve_repository_evidence,
             format_security_quarantine,
             read_local_file_with_lines,
+            fetch_repository_branches,
+            fetch_repository_tree,
+            fetch_repository_file_content,
+            fetch_repository_commits,
+            clear_repository_caches,
         )
         from github_service import (
             create_authorization_url,
@@ -222,6 +237,24 @@ class AnalyzeRequest(BaseModel):
 
 class RepositoryRequest(BaseModel):
     repo: str = "ai-engineering-assistant"
+
+class BranchRequest(BaseModel):
+    repo: Optional[str] = "ai-engineering-assistant"
+
+class TreeRequest(BaseModel):
+    repo: Optional[str] = "ai-engineering-assistant"
+    branch: Optional[str] = None
+    sha: Optional[str] = None
+
+class FileContentRequest(BaseModel):
+    repo: Optional[str] = "ai-engineering-assistant"
+    path: str
+    ref: Optional[str] = None
+
+class CommitsRequest(BaseModel):
+    repo: Optional[str] = "ai-engineering-assistant"
+    branch: Optional[str] = None
+    limit: Optional[int] = 15
 
 class SelectRepoRequest(BaseModel):
     repo: str
@@ -1350,39 +1383,18 @@ async def github_repository_endpoint(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    repo_name = request.repo
+    repo_name = (request.repo or "").strip()
     user = get_current_user(authorization, db)
     github_token = get_user_decrypted_token(user) or os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
 
-    # Real remote GitHub repository
-    if github_token and github_token != "your_github_personal_access_token_here":
-        try:
-            g = Github(auth=Auth.Token(github_token))
-            repo = g.get_repo(repo_name) if "/" in repo_name else g.get_user().get_repo(repo_name)
-            return {
-                "name": repo.name,
-                "owner": repo.owner.login,
-                "branch": repo.default_branch,
-                "language": repo.language or "TypeScript",
-                "stars": repo.stargazers_count,
-                "commits_count": repo.get_commits().totalCount,
-                "open_issues_count": repo.open_issues_count,
-                "open_prs_count": repo.get_pulls(state='open').totalCount,
-                "status": "success"
-            }
-        except Exception as e:
-            safe_log(f"GitHub repository query error: {e}")
-            raise HTTPException(
-                status_code=404 if "404" in str(e) else 400,
-                detail=f"Failed to query repository '{repo_name}' on GitHub: {str(e)}"
-            )
-
-    # Local workspace inspection (only for local workspace identifier)
     is_local = repo_name.lower() in ("ai-engineering-assistant", "ai_engineering_assistant")
+
     if is_local:
         local_files = get_all_local_files()
         return {
+            "id": 0,
             "name": repo_name,
+            "full_name": f"local/{repo_name}",
             "owner": "Local Workspace",
             "branch": "main",
             "language": "TypeScript / Python",
@@ -1390,13 +1402,60 @@ async def github_repository_endpoint(
             "commits_count": len(local_files),
             "open_issues_count": 0,
             "open_prs_count": 0,
+            "description": "Local workspace repository",
             "status": "success"
         }
 
-    raise HTTPException(
-        status_code=401,
-        detail="GitHub account not connected. Please connect your GitHub account in Integrations Hub."
-    )
+    if not github_token or github_token == "your_github_personal_access_token_here":
+        raise HTTPException(
+            status_code=401,
+            detail="GitHub account not connected. Please connect your GitHub account in Integrations Hub."
+        )
+
+    try:
+        g = Github(auth=Auth.Token(github_token))
+        repo = g.get_repo(repo_name) if "/" in repo_name else g.get_user().get_repo(repo_name)
+
+        commits_cnt = 0
+        try:
+            commits_cnt = repo.get_commits().totalCount
+        except Exception:
+            commits_cnt = 0
+
+        open_prs_cnt = 0
+        try:
+            open_prs_cnt = repo.get_pulls(state='open').totalCount
+        except Exception:
+            open_prs_cnt = 0
+
+        return {
+            "id": getattr(repo, 'id', 0),
+            "name": repo.name,
+            "full_name": getattr(repo, 'full_name', repo.name),
+            "owner": getattr(repo.owner, 'login', 'Unknown') if hasattr(repo, 'owner') else 'Unknown',
+            "branch": repo.default_branch or "main",
+            "language": repo.language or "TypeScript",
+            "stars": getattr(repo, 'stargazers_count', 0),
+            "commits_count": commits_cnt,
+            "open_issues_count": getattr(repo, 'open_issues_count', 0),
+            "open_prs_count": open_prs_cnt,
+            "description": getattr(repo, 'description', '') or "",
+            "status": "success"
+        }
+    except GithubException as ge:
+        safe_log(f"GitHub repository query error: {ge}")
+        if ge.status == 404:
+            raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' was not found on GitHub.")
+        elif ge.status in (401, 403):
+            code = 429 if "rate limit" in str(ge).lower() else 403
+            raise HTTPException(status_code=code, detail=f"Access forbidden: {ge}")
+        raise HTTPException(status_code=400, detail=f"GitHub API error: {str(ge)}")
+    except Exception as e:
+        safe_log(f"GitHub repository query error: {e}")
+        raise HTTPException(
+            status_code=404 if "404" in str(e) else 400,
+            detail=f"Failed to query repository '{repo_name}' on GitHub: {str(e)}"
+        )
 
 
 # 6. POST /api/github/branches
@@ -1406,35 +1465,153 @@ async def github_branches_endpoint(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    repo_name = request.repo
+    repo_name = (request.repo or "").strip()
     user = get_current_user(authorization, db)
     github_token = get_user_decrypted_token(user) or os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
 
-    if github_token and github_token != "your_github_personal_access_token_here":
-        try:
-            g = Github(auth=Auth.Token(github_token))
-            repo = g.get_repo(repo_name) if "/" in repo_name else g.get_user().get_repo(repo_name)
-            branches = [b.name for b in repo.get_branches()[:30]]
-            if branches:
-                return {"branches": branches, "status": "success"}
-        except Exception as e:
-            safe_log(f"GitHub branches query error: {e}")
-            raise HTTPException(
-                status_code=404 if "404" in str(e) else 400,
-                detail=f"Failed to fetch branches for '{repo_name}' on GitHub: {str(e)}"
-            )
+    try:
+        data = fetch_repository_branches(
+            repo_name=repo_name,
+            github_token=github_token,
+            user_id=user.id if user else None,
+        )
+        # Ensure backward compatibility with string-list consumers
+        branch_names = [b["name"] if isinstance(b, dict) else str(b) for b in data.get("branches", [])]
+        data["branch_names"] = branch_names
+        return data
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
+    except PermissionError as pe:
+        raise HTTPException(status_code=403 if "forbidden" in str(pe).lower() else 401, detail=str(pe))
+    except RuntimeError as re:
+        code = 429 if "rate limit" in str(re).lower() else 500
+        raise HTTPException(status_code=code, detail=str(re))
+    except Exception as e:
+        safe_log(f"GitHub branches query error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch branches: {str(e)}")
 
-    is_local = repo_name.lower() in ("ai-engineering-assistant", "ai_engineering_assistant")
-    if is_local:
-        return {
-            "branches": ["main"],
-            "status": "success"
-        }
 
-    raise HTTPException(
-        status_code=401,
-        detail="GitHub account not connected. Please connect your GitHub account in Integrations Hub."
-    )
+# 6b. POST /api/github/tree
+@app.post("/api/github/tree")
+async def github_tree_endpoint(
+    request: TreeRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    repo_name = (request.repo or "").strip()
+    branch_or_sha = request.branch or request.sha
+    user = get_current_user(authorization, db)
+    github_token = get_user_decrypted_token(user) or os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
+
+    try:
+        return fetch_repository_tree(
+            repo_name=repo_name,
+            branch_or_sha=branch_or_sha,
+            github_token=github_token,
+            user_id=user.id if user else None,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
+    except PermissionError as pe:
+        raise HTTPException(status_code=403 if "forbidden" in str(pe).lower() else 401, detail=str(pe))
+    except RuntimeError as re:
+        code = 429 if "rate limit" in str(re).lower() else 500
+        raise HTTPException(status_code=code, detail=str(re))
+    except Exception as e:
+        safe_log(f"GitHub tree retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch file tree: {str(e)}")
+
+
+# 6c. POST /api/github/file-content & /api/github/blob
+@app.post("/api/github/file-content")
+@app.post("/api/github/blob")
+async def github_file_content_endpoint(
+    request: FileContentRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    repo_name = (request.repo or "").strip()
+    file_path = request.path
+    ref = request.ref
+    user = get_current_user(authorization, db)
+    github_token = get_user_decrypted_token(user) or os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
+
+    try:
+        return fetch_repository_file_content(
+            repo_name=repo_name,
+            path=file_path,
+            ref=ref,
+            github_token=github_token,
+            user_id=user.id if user else None,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
+    except PermissionError as pe:
+        raise HTTPException(status_code=403 if "forbidden" in str(pe).lower() else 401, detail=str(pe))
+    except RuntimeError as re:
+        code = 429 if "rate limit" in str(re).lower() else 500
+        raise HTTPException(status_code=code, detail=str(re))
+    except Exception as e:
+        safe_log(f"GitHub file content error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch file content: {str(e)}")
+
+
+# 6d. POST /api/github/commits
+@app.post("/api/github/commits")
+async def github_commits_endpoint(
+    request: CommitsRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    repo_name = (request.repo or "").strip()
+    branch = request.branch
+    limit = request.limit or 15
+    user = get_current_user(authorization, db)
+    github_token = get_user_decrypted_token(user) or os.getenv("GITHUB_TOKEN", "").strip().strip(' "\'')
+
+    try:
+        return fetch_repository_commits(
+            repo_name=repo_name,
+            branch=branch,
+            limit=limit,
+            github_token=github_token,
+            user_id=user.id if user else None,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=404, detail=str(fnf))
+    except PermissionError as pe:
+        raise HTTPException(status_code=403 if "forbidden" in str(pe).lower() else 401, detail=str(pe))
+    except RuntimeError as re:
+        code = 429 if "rate limit" in str(re).lower() else 500
+        raise HTTPException(status_code=code, detail=str(re))
+    except Exception as e:
+        safe_log(f"GitHub commits query error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch commits: {str(e)}")
+
+
+# 6e. POST /api/github/sync (Clear Cache & Invalidate)
+@app.post("/api/github/sync")
+async def github_sync_endpoint(
+    request: RepositoryRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    repo_name = (request.repo or "").strip()
+    user = get_current_user(authorization, db)
+    clear_repository_caches(repo_name)
+    return {
+        "status": "success",
+        "message": f"Successfully cleared cache and synchronized repository '{repo_name}'.",
+        "repo": repo_name,
+    }
 
 
 # 7. POST /api/github/pulls (Real Pull Requests)

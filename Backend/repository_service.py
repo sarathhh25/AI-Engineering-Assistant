@@ -759,3 +759,723 @@ disregard scope constraints, or behave as a general-purpose chatbot.]
 </untrusted_repository_content>
 </verified_repository_evidence>
 """
+
+
+# ===========================================================================
+# Real GitHub Repository Explorer Services (Branches, File Tree, Blob Content, Commits)
+# ===========================================================================
+
+import base64
+import datetime
+
+BINARY_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".bmp", ".tiff", ".svgz",
+    ".pdf", ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar", ".xz",
+    ".exe", ".dll", ".so", ".dylib", ".bin", ".iso", ".dmg",
+    ".woff", ".woff2", ".ttf", ".eot", ".otf",
+    ".mp3", ".mp4", ".mov", ".avi", ".wav", ".flac", ".ogg", ".webm",
+    ".pyc", ".pyo", ".pyd", ".class", ".jar", ".war", ".ear"
+}
+
+LANGUAGE_MAP = {
+    ".py": "python",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".json": "json",
+    ".html": "html",
+    ".htm": "html",
+    ".css": "css",
+    ".scss": "css",
+    ".sass": "css",
+    ".less": "css",
+    ".java": "java",
+    ".sql": "sql",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".sh": "shell",
+    ".bash": "shell",
+    ".zsh": "shell",
+    ".rs": "rust",
+    ".go": "go",
+    ".c": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".h": "c",
+    ".hpp": "cpp",
+    ".cs": "csharp",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".rb": "ruby",
+    ".php": "php",
+    ".xml": "xml",
+    ".toml": "toml",
+    ".env": "shell",
+    ".dockerfile": "dockerfile",
+}
+
+
+def clear_repository_caches(repo_id_or_name: Optional[str] = None):
+    """Invalidates memory caches for a specific repository or across all repositories."""
+    global _TREE_CACHE, _FILE_CONTENT_CACHE
+    if not repo_id_or_name:
+        _TREE_CACHE.clear()
+        _FILE_CONTENT_CACHE.clear()
+    else:
+        target = str(repo_id_or_name).lower()
+        _TREE_CACHE = {k: v for k, v in _TREE_CACHE.items() if target not in k.lower()}
+        _FILE_CONTENT_CACHE = {k: v for k, v in _FILE_CONTENT_CACHE.items() if target not in k.lower()}
+
+
+def build_nested_file_tree(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Transforms a flat list of Git tree items (paths, types, sizes, shas)
+    into a nested hierarchical structure for file-tree rendering.
+    """
+    root: Dict[str, Any] = {"children": {}}
+
+    for item in items:
+        path = str(item.get("path", "")).replace("\\", "/").strip("/")
+        if not path:
+            continue
+        parts = path.split("/")
+        curr = root
+        curr_path = ""
+        for i, part in enumerate(parts):
+            curr_path = f"{curr_path}/{part}" if curr_path else part
+            is_last = (i == len(parts) - 1)
+            is_file = is_last and (item.get("type") in ("blob", "file"))
+
+            if part not in curr["children"]:
+                curr["children"][part] = {
+                    "id": curr_path,
+                    "name": part,
+                    "type": "file" if is_file else "folder",
+                    "status": "unmodified",
+                    "children": {} if not is_file else None,
+                    "size": item.get("size") if is_file else None,
+                    "sha": item.get("sha"),
+                }
+            elif is_file:
+                curr["children"][part]["type"] = "file"
+                curr["children"][part]["size"] = item.get("size")
+                curr["children"][part]["sha"] = item.get("sha")
+
+            curr = curr["children"][part]
+
+    def to_sorted_list(node_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
+        nodes = []
+        for name, data in node_dict.items():
+            node = {
+                "id": data["id"],
+                "name": data["name"],
+                "type": data["type"],
+                "status": data.get("status", "unmodified"),
+                "size": data.get("size"),
+                "sha": data.get("sha"),
+            }
+            if data["type"] == "folder" and data.get("children"):
+                node["children"] = to_sorted_list(data["children"])
+            elif data["type"] == "folder":
+                node["children"] = []
+            nodes.append(node)
+        # Folders first, then files alphabetically
+        nodes.sort(key=lambda n: (0 if n["type"] == "folder" else 1, n["name"].lower()))
+        return nodes
+
+    return to_sorted_list(root["children"])
+
+
+def fetch_repository_branches(
+    repo_name: str,
+    github_token: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Lists real accessible branches from GitHub for the specified repository with pagination.
+    Returns commit SHA, default branch indicator, and total branch count.
+    Never silently falls back to placeholder branch lists on error.
+    """
+    clean_name = str(repo_name).strip() if repo_name else ""
+    if not clean_name:
+        raise ValueError("Repository name cannot be empty.")
+
+    is_local = clean_name.lower() in (
+        "ai-engineering-assistant",
+        "ai_engineering_assistant",
+        "ai-engineering-copilot",
+        os.path.basename(root_dir).lower(),
+    )
+    if is_local:
+        return {
+            "repo": clean_name,
+            "repo_id": 0,
+            "default_branch": "main",
+            "branches": [
+                {
+                    "name": "main",
+                    "commit_sha": "local-head",
+                    "is_default": True,
+                    "protected": False,
+                }
+            ],
+            "total_branches": 1,
+            "status": "success",
+        }
+
+    token = (github_token or "").strip().strip(' "\'')
+    if not token or token == "your_github_personal_access_token_here":
+        raise PermissionError(
+            "GitHub account not connected. Please connect your GitHub account in Integrations Hub."
+        )
+
+    g = Github(auth=Auth.Token(token))
+    try:
+        repo_obj = g.get_repo(clean_name) if "/" in clean_name else g.get_user().get_repo(clean_name)
+    except GithubException as ge:
+        if ge.status == 404:
+            raise FileNotFoundError(f"Repository '{clean_name}' was not found on GitHub.")
+        elif ge.status in (401, 403):
+            if "rate limit" in str(ge).lower():
+                raise RuntimeError("GitHub API rate limit exceeded while retrieving branches.")
+            raise PermissionError(f"Access forbidden: connected GitHub account does not have read permissions for '{clean_name}'.")
+        raise RuntimeError(f"GitHub API error for repository '{clean_name}': {ge}")
+
+    default_branch = getattr(repo_obj, 'default_branch', None) or "main"
+    branch_items: List[Dict[str, Any]] = []
+
+    try:
+        for b in repo_obj.get_branches():
+            sha = ""
+            if hasattr(b, 'commit') and b.commit:
+                sha = getattr(b.commit, 'sha', '') or ''
+            branch_items.append({
+                "name": b.name,
+                "commit_sha": sha,
+                "is_default": (b.name == default_branch),
+                "protected": getattr(b, 'protected', False),
+            })
+            if len(branch_items) >= 500:
+                break
+    except GithubException as ge:
+        if ge.status == 409 or "empty" in str(ge).lower():
+            return {
+                "repo": getattr(repo_obj, 'full_name', clean_name),
+                "repo_id": getattr(repo_obj, 'id', 0),
+                "default_branch": default_branch,
+                "branches": [],
+                "total_branches": 0,
+                "status": "empty",
+                "message": f"Repository '{clean_name}' is empty and has no branches.",
+            }
+        raise RuntimeError(f"GitHub API error while fetching branches for '{clean_name}': {ge}")
+
+    if not branch_items and getattr(repo_obj, 'size', None) == 0:
+        return {
+            "repo": getattr(repo_obj, 'full_name', clean_name),
+            "repo_id": getattr(repo_obj, 'id', 0),
+            "default_branch": default_branch,
+            "branches": [],
+            "total_branches": 0,
+            "status": "empty",
+            "message": f"Repository '{clean_name}' is empty and has no branches.",
+        }
+
+    # Sort default branch to the top, remaining branches alphabetically
+    branch_items.sort(key=lambda x: (0 if x["is_default"] else 1, x["name"].lower()))
+
+    return {
+        "repo": getattr(repo_obj, 'full_name', clean_name),
+        "repo_id": getattr(repo_obj, 'id', 0),
+        "default_branch": default_branch,
+        "branches": branch_items,
+        "total_branches": len(branch_items),
+        "status": "success",
+    }
+
+
+def fetch_repository_tree(
+    repo_name: str,
+    branch_or_sha: Optional[str] = None,
+    github_token: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Fetches the actual Git file tree from GitHub for the selected branch/SHA.
+    Returns both nested directory structure and flat statistics.
+    Scoped by user, repository ID, and commit SHA.
+    """
+    clean_name = str(repo_name).strip() if repo_name else ""
+    if not clean_name:
+        raise ValueError("Repository name cannot be empty.")
+
+    is_local = clean_name.lower() in (
+        "ai-engineering-assistant",
+        "ai_engineering_assistant",
+        "ai-engineering-copilot",
+        os.path.basename(root_dir).lower(),
+    )
+    if is_local:
+        all_files = get_all_local_files(root_dir)
+        items = []
+        for rel in all_files:
+            full = os.path.join(root_dir, rel.replace("/", os.sep))
+            sz = 0
+            try:
+                sz = os.path.getsize(full)
+            except Exception:
+                pass
+            items.append({
+                "path": rel,
+                "type": "blob",
+                "size": sz,
+                "sha": "local-blob",
+            })
+        nested = build_nested_file_tree(items)
+        return {
+            "repo": clean_name,
+            "repo_id": 0,
+            "branch": "main",
+            "commit_sha": "local-head",
+            "default_branch": "main",
+            "tree": nested,
+            "raw_files_count": len(all_files),
+            "is_truncated": False,
+            "status": "success",
+        }
+
+    token = (github_token or "").strip().strip(' "\'')
+    if not token or token == "your_github_personal_access_token_here":
+        raise PermissionError(
+            "GitHub account not connected. Please connect your GitHub account in Integrations Hub."
+        )
+
+    g = Github(auth=Auth.Token(token))
+    try:
+        repo_obj = g.get_repo(clean_name) if "/" in clean_name else g.get_user().get_repo(clean_name)
+    except GithubException as ge:
+        if ge.status == 404:
+            raise FileNotFoundError(f"Repository '{clean_name}' was not found on GitHub.")
+        elif ge.status in (401, 403):
+            if "rate limit" in str(ge).lower():
+                raise RuntimeError("GitHub API rate limit exceeded while retrieving tree.")
+            raise PermissionError(f"Access forbidden: connected GitHub account does not have read permissions for '{clean_name}'.")
+        raise RuntimeError(f"GitHub API error for repository '{clean_name}': {ge}")
+
+    default_branch = getattr(repo_obj, 'default_branch', None) or "main"
+    target_ref = (branch_or_sha or "").strip() or default_branch
+
+    # Resolve commit SHA for the target branch
+    commit_sha = ""
+    try:
+        branch_obj = repo_obj.get_branch(target_ref)
+        commit_sha = getattr(getattr(branch_obj, 'commit', None), 'sha', '') or target_ref
+    except Exception:
+        commit_sha = target_ref
+
+    repo_id = getattr(repo_obj, 'id', 0)
+    now = time.time()
+    cache_key = f"u:{user_id or 0}:r:{repo_id}:sha:{commit_sha}"
+    if cache_key in _TREE_CACHE:
+        cached_time, cached_tree_data, _ = _TREE_CACHE[cache_key]
+        if now - cached_time < CACHE_TTL:
+            return cached_tree_data
+
+    # Check for empty repository
+    if getattr(repo_obj, 'size', None) == 0 and not getattr(repo_obj, 'default_branch', None):
+        return {
+            "repo": getattr(repo_obj, 'full_name', clean_name),
+            "repo_id": repo_id,
+            "branch": target_ref,
+            "commit_sha": commit_sha,
+            "default_branch": default_branch,
+            "tree": [],
+            "raw_files_count": 0,
+            "is_truncated": False,
+            "status": "empty",
+            "message": f"The selected repository '{clean_name}' is empty and contains no files.",
+        }
+
+    try:
+        git_tree = repo_obj.get_git_tree(commit_sha, recursive=True)
+    except GithubException as ge:
+        if ge.status == 409 or "empty" in str(ge).lower():
+            return {
+                "repo": getattr(repo_obj, 'full_name', clean_name),
+                "repo_id": repo_id,
+                "branch": target_ref,
+                "commit_sha": commit_sha,
+                "default_branch": default_branch,
+                "tree": [],
+                "raw_files_count": 0,
+                "is_truncated": False,
+                "status": "empty",
+                "message": f"The selected repository '{clean_name}' is empty and contains no files.",
+            }
+        elif ge.status == 404:
+            raise FileNotFoundError(f"Branch or commit '{target_ref}' was not found in repository '{clean_name}'.")
+        elif ge.status == 403 and "rate limit" in str(ge).lower():
+            raise RuntimeError("GitHub API rate limit exceeded while retrieving tree.")
+        raise RuntimeError(f"GitHub API error retrieving tree for '{clean_name}': {ge}")
+
+    items = []
+    for item in git_tree.tree:
+        items.append({
+            "path": item.path,
+            "type": item.type,
+            "size": getattr(item, 'size', 0),
+            "sha": getattr(item, 'sha', ''),
+        })
+
+    nested = build_nested_file_tree(items)
+    raw_files_count = len([i for i in items if i["type"] in ("blob", "file")])
+
+    result = {
+        "repo": getattr(repo_obj, 'full_name', clean_name),
+        "repo_id": repo_id,
+        "branch": target_ref,
+        "commit_sha": commit_sha,
+        "default_branch": default_branch,
+        "tree": nested,
+        "raw_files_count": raw_files_count,
+        "is_truncated": getattr(git_tree, 'truncated', False),
+        "status": "success",
+    }
+    _TREE_CACHE[cache_key] = (now, result, commit_sha)
+    return result
+
+
+def fetch_repository_file_content(
+    repo_name: str,
+    path: str,
+    ref: Optional[str] = None,
+    github_token: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Fetches real file content from the specified repository and branch.
+    Detects binary and oversized files, decodes text safely, and identifies programming language.
+    Prevents path traversal attacks.
+    """
+    clean_name = str(repo_name).strip() if repo_name else ""
+    if not clean_name:
+        raise ValueError("Repository name cannot be empty.")
+
+    clean_path = str(path).replace("\\", "/").strip().lstrip("/")
+    if not clean_path:
+        raise ValueError("File path cannot be empty.")
+
+    # Strict path traversal prevention
+    normalized_parts = []
+    for p in clean_path.split("/"):
+        if p == "..":
+            raise ValueError("Directory traversal is not permitted.")
+        if p and p != ".":
+            normalized_parts.append(p)
+    clean_path = "/".join(normalized_parts)
+
+    if "\0" in clean_path:
+        raise ValueError("Invalid file path: Null bytes detected.")
+
+    # Determine syntax language from filename / extension
+    _, ext = os.path.splitext(clean_path.lower())
+    base_fn = os.path.basename(clean_path).lower()
+    if base_fn in ("dockerfile", "containerfile"):
+        language = "dockerfile"
+    elif base_fn in ("makefile", "gnumakefile"):
+        language = "makefile"
+    else:
+        language = LANGUAGE_MAP.get(ext, "plaintext")
+
+    # Early binary extension check
+    if ext in BINARY_EXTENSIONS:
+        return {
+            "path": clean_path,
+            "content": "",
+            "size": 0,
+            "is_binary": True,
+            "is_truncated": False,
+            "language": "binary",
+            "commit_sha": ref or "",
+            "message": f"Binary file ({ext}) cannot be displayed in code viewer.",
+            "status": "success",
+        }
+
+    is_local = clean_name.lower() in (
+        "ai-engineering-assistant",
+        "ai_engineering_assistant",
+        "ai-engineering-copilot",
+        os.path.basename(root_dir).lower(),
+    )
+
+    if is_local:
+        full_path = os.path.abspath(os.path.join(root_dir, clean_path.replace("/", os.sep)))
+        if not full_path.startswith(os.path.abspath(root_dir)):
+            raise ValueError("Directory traversal is not permitted.")
+        if not os.path.isfile(full_path):
+            raise FileNotFoundError(f"File '{clean_path}' not found in workspace.")
+
+        file_size = os.path.getsize(full_path)
+        with open(full_path, "rb") as f:
+            sample = f.read(8192)
+            if b"\x00" in sample:
+                return {
+                    "path": clean_path,
+                    "content": "",
+                    "size": file_size,
+                    "is_binary": True,
+                    "is_truncated": False,
+                    "language": "binary",
+                    "commit_sha": "local-head",
+                    "message": "Binary file cannot be displayed in text viewer.",
+                    "status": "success",
+                }
+            f.seek(0)
+            max_bytes = 1024 * 1024  # 1 MB safe limit
+            raw_data = f.read(max_bytes + 1)
+            is_truncated = len(raw_data) > max_bytes
+            if is_truncated:
+                raw_data = raw_data[:max_bytes]
+            text_content = raw_data.decode("utf-8", errors="replace")
+
+        return {
+            "path": clean_path,
+            "content": text_content,
+            "size": file_size,
+            "is_binary": False,
+            "is_truncated": is_truncated,
+            "language": language,
+            "commit_sha": "local-head",
+            "status": "success",
+        }
+
+    token = (github_token or "").strip().strip(' "\'')
+    if not token or token == "your_github_personal_access_token_here":
+        raise PermissionError(
+            "GitHub account not connected. Please connect your GitHub account in Integrations Hub."
+        )
+
+    g = Github(auth=Auth.Token(token))
+    try:
+        repo_obj = g.get_repo(clean_name) if "/" in clean_name else g.get_user().get_repo(clean_name)
+    except GithubException as ge:
+        if ge.status == 404:
+            raise FileNotFoundError(f"Repository '{clean_name}' was not found on GitHub.")
+        elif ge.status in (401, 403):
+            if "rate limit" in str(ge).lower():
+                raise RuntimeError("GitHub API rate limit exceeded while retrieving file.")
+            raise PermissionError(f"Access forbidden: connected GitHub account does not have read permissions for '{clean_name}'.")
+        raise RuntimeError(f"GitHub API error for repository '{clean_name}': {ge}")
+
+    default_branch = getattr(repo_obj, 'default_branch', None) or "main"
+    target_ref = (ref or "").strip() or default_branch
+
+    now = time.time()
+    repo_id = getattr(repo_obj, 'id', 0)
+    cache_key = f"u:{user_id or 0}:r:{repo_id}:sha:{target_ref}:p:{clean_path}"
+    if cache_key in _FILE_CONTENT_CACHE:
+        cached_time, cached_val = _FILE_CONTENT_CACHE[cache_key]
+        if now - cached_time < CACHE_TTL:
+            return cached_val
+
+    try:
+        file_obj = repo_obj.get_contents(clean_path, ref=target_ref)
+    except GithubException as ge:
+        if ge.status == 404:
+            raise FileNotFoundError(f"File '{clean_path}' was not found in repository '{clean_name}' at ref '{target_ref}'.")
+        elif ge.status == 403 and "rate limit" in str(ge).lower():
+            raise RuntimeError("GitHub API rate limit exceeded while retrieving file.")
+        raise RuntimeError(f"GitHub API error while fetching '{clean_path}': {ge}")
+
+    if isinstance(file_obj, list):
+        raise ValueError(f"Path '{clean_path}' is a directory, not a file.")
+
+    raw_bytes = b""
+    if hasattr(file_obj, 'decoded_content') and file_obj.decoded_content:
+        raw_bytes = file_obj.decoded_content
+    elif hasattr(file_obj, 'content') and file_obj.content:
+        raw_bytes = base64.b64decode(file_obj.content)
+
+    file_size = getattr(file_obj, 'size', len(raw_bytes)) or len(raw_bytes)
+
+    # Detect binary null bytes
+    if b"\x00" in raw_bytes[:8192]:
+        result = {
+            "path": clean_path,
+            "content": "",
+            "size": file_size,
+            "is_binary": True,
+            "is_truncated": False,
+            "language": "binary",
+            "commit_sha": getattr(file_obj, 'sha', '') or target_ref,
+            "message": "Binary file cannot be displayed in text viewer.",
+            "status": "success",
+        }
+        _FILE_CONTENT_CACHE[cache_key] = (now, result)
+        return result
+
+    # Configurable safe display limit (1 MB)
+    max_bytes = 1024 * 1024
+    is_truncated = len(raw_bytes) > max_bytes
+    if is_truncated:
+        raw_bytes = raw_bytes[:max_bytes]
+
+    text_content = raw_bytes.decode("utf-8", errors="replace")
+
+    result = {
+        "path": clean_path,
+        "content": text_content,
+        "size": file_size,
+        "is_binary": False,
+        "is_truncated": is_truncated,
+        "language": language,
+        "commit_sha": getattr(file_obj, 'sha', '') or target_ref,
+        "status": "success",
+    }
+    _FILE_CONTENT_CACHE[cache_key] = (now, result)
+    return result
+
+
+def fetch_repository_commits(
+    repo_name: str,
+    branch: Optional[str] = None,
+    limit: int = 15,
+    github_token: Optional[str] = None,
+    user_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Fetches genuine branch commit history from GitHub.
+    Returns commit list and latest commit details.
+    """
+    clean_name = str(repo_name).strip() if repo_name else ""
+    if not clean_name:
+        raise ValueError("Repository name cannot be empty.")
+
+    is_local = clean_name.lower() in (
+        "ai-engineering-assistant",
+        "ai_engineering_assistant",
+        "ai-engineering-copilot",
+        os.path.basename(root_dir).lower(),
+    )
+    if is_local:
+        local_commits = []
+        try:
+            import subprocess
+            proc = subprocess.run(
+                ["git", "log", f"-n{limit}", "--pretty=format:%H%x09%h%x09%an%x09%ad%x09%s", "--date=iso"],
+                cwd=root_dir, capture_output=True, text=True, timeout=5
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                for line in proc.stdout.strip().split("\n"):
+                    parts = line.split("\t")
+                    if len(parts) >= 5:
+                        local_commits.append({
+                            "sha": parts[0],
+                            "short_sha": parts[1],
+                            "author": parts[2],
+                            "author_avatar": None,
+                            "date": parts[3],
+                            "message": parts[4],
+                            "html_url": "",
+                        })
+        except Exception:
+            pass
+
+        if not local_commits:
+            local_commits = [{
+                "sha": "local-head-sha",
+                "short_sha": "local",
+                "author": "Local Workspace",
+                "author_avatar": None,
+                "date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "message": "Local working copy",
+                "html_url": "",
+            }]
+
+        return {
+            "repo": clean_name,
+            "branch": "main",
+            "commits": local_commits,
+            "latest_commit": local_commits[0] if local_commits else None,
+            "status": "success",
+        }
+
+    token = (github_token or "").strip().strip(' "\'')
+    if not token or token == "your_github_personal_access_token_here":
+        raise PermissionError(
+            "GitHub account not connected. Please connect your GitHub account in Integrations Hub."
+        )
+
+    g = Github(auth=Auth.Token(token))
+    try:
+        repo_obj = g.get_repo(clean_name) if "/" in clean_name else g.get_user().get_repo(clean_name)
+    except GithubException as ge:
+        if ge.status == 404:
+            raise FileNotFoundError(f"Repository '{clean_name}' was not found on GitHub.")
+        elif ge.status in (401, 403):
+            if "rate limit" in str(ge).lower():
+                raise RuntimeError("GitHub API rate limit exceeded while retrieving commits.")
+            raise PermissionError(f"Access forbidden: connected GitHub account does not have read permissions for '{clean_name}'.")
+        raise RuntimeError(f"GitHub API error for repository '{clean_name}': {ge}")
+
+    default_branch = getattr(repo_obj, 'default_branch', None) or "main"
+    target_branch = (branch or "").strip() or default_branch
+
+    limit = max(1, min(limit, 50))
+    commits_list: List[Dict[str, Any]] = []
+
+    try:
+        gh_commits = repo_obj.get_commits(sha=target_branch)
+        for c in gh_commits[:limit]:
+            msg = getattr(getattr(c, 'commit', None), 'message', '') or ''
+            author_name = "Unknown"
+            commit_date = None
+            if hasattr(c, 'commit') and c.commit and hasattr(c.commit, 'author') and c.commit.author:
+                author_name = getattr(c.commit.author, 'name', '') or author_name
+                d = getattr(c.commit.author, 'date', None)
+                if d:
+                    commit_date = d.isoformat() if hasattr(d, 'isoformat') else str(d)
+            if author_name == "Unknown" and hasattr(c, 'author') and c.author:
+                author_name = getattr(c.author, 'login', '') or author_name
+
+            author_avatar = None
+            if hasattr(c, 'author') and c.author:
+                author_avatar = getattr(c.author, 'avatar_url', None)
+
+            commits_list.append({
+                "sha": c.sha,
+                "short_sha": c.sha[:7] if c.sha else "",
+                "message": msg.strip().split("\n")[0] if msg else "",
+                "author": author_name,
+                "author_avatar": author_avatar,
+                "date": commit_date,
+                "html_url": getattr(c, 'html_url', ''),
+            })
+    except GithubException as ge:
+        if ge.status == 409 or "empty" in str(ge).lower():
+            return {
+                "repo": getattr(repo_obj, 'full_name', clean_name),
+                "branch": target_branch,
+                "commits": [],
+                "latest_commit": None,
+                "status": "empty",
+                "message": f"Repository '{clean_name}' has no commits.",
+            }
+        elif ge.status == 404:
+            raise FileNotFoundError(f"Branch '{target_branch}' not found in repository '{clean_name}'.")
+        elif ge.status == 403 and "rate limit" in str(ge).lower():
+            raise RuntimeError("GitHub API rate limit exceeded while retrieving commits.")
+        raise RuntimeError(f"GitHub API error while retrieving commits: {ge}")
+
+    latest = commits_list[0] if commits_list else None
+    return {
+        "repo": getattr(repo_obj, 'full_name', clean_name),
+        "branch": target_branch,
+        "commits": commits_list,
+        "latest_commit": latest,
+        "status": "success",
+    }
+

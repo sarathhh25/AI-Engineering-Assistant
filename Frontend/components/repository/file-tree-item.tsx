@@ -3,19 +3,27 @@
 import React from 'react'
 import {
   Folder,
+  FolderOpen,
   FileCode,
   FileText,
   FileJson,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  Database,
+  Terminal,
+  Image,
+  Package,
+  Settings,
 } from 'lucide-react'
 
 export interface FileNode {
   id: string
   name: string
   type: 'file' | 'folder'
-  status?: 'modified' | 'added' | 'indexed'
-  children?: FileNode[]
+  status?: 'modified' | 'added' | 'indexed' | 'unmodified'
+  size?: number | null
+  sha?: string | null
+  children?: FileNode[] | null
 }
 
 interface FileTreeItemProps {
@@ -36,14 +44,30 @@ export function FileTreeItem({
   onSelectFile,
 }: FileTreeItemProps) {
   const isFolder = item.type === 'folder'
-  const isExpanded = expandedFolders[item.id]
+  const isExpanded = Boolean(expandedFolders[item.id])
   const isSelected = selectedFileId === item.id
 
   const getFileIcon = (fileName: string) => {
-    if (fileName.endsWith('.tsx') || fileName.endsWith('.ts')) return <FileCode className="size-3.5 text-blue-500 shrink-0" />
-    if (fileName.endsWith('.css')) return <FileCode className="size-3.5 text-sky-500 shrink-0" />
-    if (fileName.endsWith('.py')) return <FileCode className="size-3.5 text-emerald-500 shrink-0" />
-    if (fileName.endsWith('.json')) return <FileJson className="size-3.5 text-amber-500 shrink-0" />
+    const lower = fileName.toLowerCase()
+    if (lower.endsWith('.tsx') || lower.endsWith('.ts')) return <FileCode className="size-3.5 text-blue-400 shrink-0" />
+    if (lower.endsWith('.jsx') || lower.endsWith('.js')) return <FileCode className="size-3.5 text-yellow-400 shrink-0" />
+    if (lower.endsWith('.py')) return <FileCode className="size-3.5 text-emerald-400 shrink-0" />
+    if (lower.endsWith('.json')) return <FileJson className="size-3.5 text-amber-400 shrink-0" />
+    if (lower.endsWith('.css') || lower.endsWith('.scss')) return <FileCode className="size-3.5 text-sky-400 shrink-0" />
+    if (lower.endsWith('.html') || lower.endsWith('.htm')) return <FileCode className="size-3.5 text-orange-400 shrink-0" />
+    if (lower.endsWith('.java') || lower.endsWith('.kt') || lower.endsWith('.kts')) return <FileCode className="size-3.5 text-rose-400 shrink-0" />
+    if (lower.endsWith('.sql')) return <Database className="size-3.5 text-purple-400 shrink-0" />
+    if (lower.endsWith('.sh') || lower.endsWith('.bash') || lower.endsWith('.zsh')) return <Terminal className="size-3.5 text-lime-400 shrink-0" />
+    if (lower.endsWith('.rs') || lower.endsWith('.go')) return <FileCode className="size-3.5 text-cyan-400 shrink-0" />
+    if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.svg') || lower.endsWith('.ico') || lower.endsWith('.webp')) {
+      return <Image className="size-3.5 text-pink-400 shrink-0" />
+    }
+    if (lower.endsWith('.zip') || lower.endsWith('.tar') || lower.endsWith('.gz') || lower.endsWith('.7z')) {
+      return <Package className="size-3.5 text-stone-400 shrink-0" />
+    }
+    if (lower.endsWith('.yml') || lower.endsWith('.yaml') || lower.endsWith('.toml') || lower.startsWith('.env')) {
+      return <Settings className="size-3.5 text-amber-300 shrink-0" />
+    }
     return <FileText className="size-3.5 text-muted-foreground shrink-0" />
   }
 
