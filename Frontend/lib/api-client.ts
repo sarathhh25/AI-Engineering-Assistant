@@ -77,6 +77,77 @@ export interface GitHubRepositoryItem {
   }
 }
 
+export interface GitHubBranchDetail {
+  name: string
+  commit_sha: string
+  is_default: boolean
+  protected?: boolean
+}
+
+export interface GitHubBranchesResult {
+  repo: string
+  repo_id: number
+  default_branch: string
+  branches: GitHubBranchDetail[]
+  branch_names: string[]
+  total_branches: number
+  status: string
+}
+
+export interface FileTreeNode {
+  id: string
+  name: string
+  type: 'file' | 'folder'
+  size?: number | null
+  sha?: string | null
+  children?: FileTreeNode[] | null
+  status?: 'modified' | 'added' | 'indexed' | 'unmodified'
+}
+
+export interface GitHubTreeResult {
+  repo: string
+  repo_id: number
+  branch: string
+  commit_sha: string
+  default_branch: string
+  tree: FileTreeNode[]
+  raw_files_count: number
+  is_truncated: boolean
+  status: string
+  message?: string
+}
+
+export interface GitHubFileContentResult {
+  path: string
+  content: string
+  size: number
+  is_binary: boolean
+  is_truncated: boolean
+  language: string
+  commit_sha?: string
+  status: string
+  message?: string
+}
+
+export interface GitHubCommitDetail {
+  sha: string
+  short_sha: string
+  message: string
+  author: string
+  author_avatar?: string | null
+  date?: string | null
+  html_url?: string
+}
+
+export interface GitHubCommitsResult {
+  repo: string
+  branch: string
+  commits: GitHubCommitDetail[]
+  latest_commit?: GitHubCommitDetail | null
+  status: string
+  message?: string
+}
+
 class ApiClient {
   private baseUrl: string
   private cachedToken: string | null = null
@@ -254,13 +325,90 @@ class ApiClient {
   }
 
   async fetchGitHubBranches(repo?: string): Promise<string[]> {
-    const res = await this.request<{ branches: string[] }>('/api/github/branches', {
+    const res = await this.request<any>('/api/github/branches', {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ repo: repo || undefined }),
       timeoutMs: 15000,
     })
-    return res.branches || []
+    if (res && Array.isArray(res.branch_names) && res.branch_names.length > 0) {
+      return res.branch_names
+    }
+    if (res && Array.isArray(res.branches)) {
+      return res.branches.map((b: any) => (typeof b === 'string' ? b : b.name))
+    }
+    return []
+  }
+
+  async fetchGitHubBranchesDetails(repo?: string): Promise<GitHubBranchesResult> {
+    const res = await this.request<any>('/api/github/branches', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo: repo || undefined }),
+      timeoutMs: 15000,
+    })
+    const rawBranches: any[] = res.branches || []
+    const normalizedBranches: GitHubBranchDetail[] = rawBranches.map((b: any) => {
+      if (typeof b === 'string') {
+        return {
+          name: b,
+          commit_sha: '',
+          is_default: b === (res.default_branch || 'main'),
+          protected: false,
+        }
+      }
+      return {
+        name: b.name,
+        commit_sha: b.commit_sha || '',
+        is_default: Boolean(b.is_default),
+        protected: Boolean(b.protected),
+      }
+    })
+    return {
+      repo: res.repo || repo || '',
+      repo_id: res.repo_id || 0,
+      default_branch: res.default_branch || (normalizedBranches[0]?.name || 'main'),
+      branches: normalizedBranches,
+      branch_names: res.branch_names || normalizedBranches.map((b) => b.name),
+      total_branches: res.total_branches || normalizedBranches.length,
+      status: res.status || 'success',
+    }
+  }
+
+  async fetchGitHubTree(repo: string, branch?: string, sha?: string): Promise<GitHubTreeResult> {
+    return await this.request<GitHubTreeResult>('/api/github/tree', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo, branch: branch || undefined, sha: sha || undefined }),
+      timeoutMs: 25000,
+    })
+  }
+
+  async fetchGitHubFileContent(repo: string, path: string, ref?: string): Promise<GitHubFileContentResult> {
+    return await this.request<GitHubFileContentResult>('/api/github/file-content', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo, path, ref: ref || undefined }),
+      timeoutMs: 20000,
+    })
+  }
+
+  async fetchGitHubCommits(repo: string, branch?: string, limit: number = 15): Promise<GitHubCommitsResult> {
+    return await this.request<GitHubCommitsResult>('/api/github/commits', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo, branch: branch || undefined, limit }),
+      timeoutMs: 20000,
+    })
+  }
+
+  async syncGitHubRepository(repo: string): Promise<{ status: string; message: string; repo: string }> {
+    return await this.request<{ status: string; message: string; repo: string }>('/api/github/sync', {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repo }),
+      timeoutMs: 15000,
+    })
   }
 
   async executeAgent(
