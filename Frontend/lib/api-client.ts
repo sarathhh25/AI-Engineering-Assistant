@@ -509,7 +509,8 @@ class ApiClient {
   }
 
   async renameConversation(id: string, title: string): Promise<{ id: string; title: string }> {
-    return await this.request(`/api/conversations/${encodeURIComponent(id)}`, {
+    const rawId = String(id).startsWith('conv-') ? id.replace('conv-', '') : id
+    return await this.request(`/api/conversations/${encodeURIComponent(rawId)}`, {
       method: 'PATCH',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ title }),
@@ -518,7 +519,8 @@ class ApiClient {
   }
 
   async deleteConversation(id: string): Promise<{ status: string }> {
-    return await this.request(`/api/conversations/${encodeURIComponent(id)}`, {
+    const rawId = String(id).startsWith('conv-') ? id.replace('conv-', '') : id
+    return await this.request(`/api/conversations/${encodeURIComponent(rawId)}`, {
       method: 'DELETE',
       headers: this.getAuthHeaders(),
       timeoutMs: 10000,

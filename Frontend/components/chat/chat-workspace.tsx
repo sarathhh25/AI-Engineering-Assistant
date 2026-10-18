@@ -44,7 +44,8 @@ export function ChatWorkspace({
       ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
       : null
 
-    if (token && activeChatId.startsWith('conv-')) {
+    const isValidConvId = Boolean(activeChatId && (activeChatId.startsWith('conv-') || !isNaN(Number(activeChatId))))
+    if (token && isValidConvId) {
       apiClient
         .getConversation(activeChatId)
         .then((conv) => {
@@ -192,7 +193,7 @@ export function ChatWorkspace({
         const formatted = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1)
         const finalTitle = formatted.length > 32 ? formatted.substring(0, 30) + '...' : formatted
         onUpdateChatTitle(activeChatId, finalTitle)
-        if (activeChatId.startsWith('conv-')) {
+        if (activeChatId && (activeChatId.startsWith('conv-') || !isNaN(Number(activeChatId)))) {
           apiClient.renameConversation(activeChatId, finalTitle).catch(() => {})
         }
       }

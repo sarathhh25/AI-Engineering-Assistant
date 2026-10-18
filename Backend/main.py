@@ -90,6 +90,7 @@ try:
         fetch_repository_file_content,
         fetch_repository_commits,
         clear_repository_caches,
+        get_remote_file_content_cached,
     )
     from Backend.github_service import (
         create_authorization_url,
@@ -122,6 +123,7 @@ except ImportError:
             fetch_repository_file_content,
             fetch_repository_commits,
             clear_repository_caches,
+            get_remote_file_content_cached,
         )
         from .github_service import (
             create_authorization_url,
@@ -153,6 +155,7 @@ except ImportError:
             fetch_repository_file_content,
             fetch_repository_commits,
             clear_repository_caches,
+            get_remote_file_content_cached,
         )
         from github_service import (
             create_authorization_url,
@@ -174,20 +177,39 @@ def on_startup():
     except Exception as e:
         safe_log(f"Database startup warning: {e}")
 
+cors_allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+frontend_env = os.getenv("FRONTEND_URL")
+if frontend_env and frontend_env.strip() and frontend_env.strip() not in cors_allowed_origins:
+    cors_allowed_origins.append(frontend_env.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://10.144.212.47:3000",
-        "http://10.144.212.47:8000",
-        "*",
-    ],
+    allow_origins=cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import time
+from collections import defaultdict
+_rate_limits = defaultdict(list)
+
+def check_rate_limit(key: str, max_requests: int = 60, window_seconds: int = 60):
+    """Simple in-memory sliding-window rate limiter per client IP / user."""
+    now = time.time()
+    valid_ts = [t for t in _rate_limits[key] if now - t < window_seconds]
+    if len(valid_ts) >= max_requests:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please wait a moment before sending more requests."
+        )
+    valid_ts.append(now)
+    _rate_limits[key] = valid_ts
 
 retry_options = types.HttpRetryOptions(
     attempts=3,
@@ -1205,16 +1227,17 @@ async def chat_endpoint(
             }
 
         # Save user message to database if user is logged in
-        if user_id and not chat_session:
-            bound_repo_name = repo_info["full_name"] if not repo_info.get("is_local") else repo_info["name"]
-            chat_session = ChatSession(
-                user_id=user_id,
-                title=user_question[:80],
-                repo_name=bound_repo_name,
-                is_active=True,
-            )
-            db.add(chat_session)
-            db.flush()
+        if user_id:
+            if not chat_session:
+                bound_repo_name = repo_info["full_name"] if not repo_info.get("is_local") else repo_info["name"]
+                chat_session = ChatSession(
+                    user_id=user_id,
+                    title=user_question[:80],
+                    repo_name=bound_repo_name,
+                    is_active=True,
+                )
+                db.add(chat_session)
+                db.flush()
 
             try:
                 user_db_msg = Message(
@@ -1798,8 +1821,20 @@ async def agent_endpoint(
 
     # Read real file contents
     analyzed_files_content = {}
+    is_local = repo_info.get("is_local", False)
+    repo_obj = repo_info.get("repo_obj")
+    commit_sha = repo_info.get("commit_sha", "")
+
     for f in files_to_read:
-        content, _ = read_local_file_with_lines(f, max_lines=120)
+        content = None
+        if is_local:
+            content, _ = read_local_file_with_lines(f, max_lines=120)
+        else:
+            if repo_obj:
+                raw_c = get_remote_file_content_cached(repo_obj, f, commit_sha)
+                if raw_c:
+                    lines = raw_c.splitlines()[:120]
+                    content = "\n".join(lines)
         if content:
             analyzed_files_content[f] = content
 

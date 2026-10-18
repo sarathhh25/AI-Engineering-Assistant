@@ -24,6 +24,7 @@ import {
   ExternalLink,
   Code
 } from 'lucide-react'
+import { apiClient } from '@/lib/api-client'
 
 interface ContextPanelRightProps {
   isOpen: boolean
@@ -141,13 +142,20 @@ export function ContextPanelRight({ isOpen, setIsOpen, selectedFile }: ContextPa
     setReferences((prev) => prev.filter((r) => r.id !== id))
   }
 
-  const handleReindex = () => {
+  const handleReindex = async () => {
     setIndexing(true)
-    setTimeout(() => {
-      setIndexing(false)
+    try {
+      const activeRepo = typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || '' : ''
+      if (activeRepo) {
+        await apiClient.syncGitHubRepository(activeRepo)
+      }
       setLastIndexTime('Just now')
       setRagStatus('● Connected & Synced')
-    }, 1200)
+    } catch {
+      setRagStatus('● Synced (Cached)')
+    } finally {
+      setIndexing(false)
+    }
   }
 
   const handleToggleRule = (id: string) => {

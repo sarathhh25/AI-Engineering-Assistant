@@ -1,9 +1,52 @@
 'use client'
 
-import React from 'react'
-import { Activity, CheckCircle2, AlertTriangle, ShieldCheck, Cpu } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { Activity, ShieldCheck, GitBranch, FolderGit2, CheckCircle2, Clock } from 'lucide-react'
+import { apiClient } from '@/lib/api-client'
 
 export function RepositoryHealth() {
+  const [repoName, setRepoName] = useState<string | null>(null)
+  const [isConnected, setIsConnected] = useState<boolean>(false)
+  const [branchesCount, setBranchesCount] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkHealth = async () => {
+      try {
+        const status = await apiClient.getGitHubStatus()
+        if (!isMounted) return
+
+        setIsConnected(Boolean(status.connected))
+        const active =
+          status.selected_repo ||
+          (typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || null : null)
+        setRepoName(active)
+
+        if (active && status.connected) {
+          try {
+            const b = await apiClient.fetchGitHubBranches(active)
+            if (isMounted && Array.isArray(b)) {
+              setBranchesCount(b.length)
+            }
+          } catch {
+            if (isMounted) setBranchesCount(1)
+          }
+        }
+      } catch {
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    checkHealth()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   return (
     <div className="p-4 rounded-2xl bg-card border border-border space-y-4 select-none shadow-xs">
       <div className="flex items-center justify-between">
@@ -17,39 +60,24 @@ export function RepositoryHealth() {
         </div>
 
         <div className="flex items-center gap-1 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-          92 / 100
+          {repoName ? 'ACTIVE' : 'STANDBY'}
         </div>
       </div>
 
-      {/* Visual Health Score Indicator */}
+      {/* Visual Health / Status Indicator */}
       <div className="flex items-center gap-4 p-3 rounded-xl bg-secondary/50 border border-border">
-        {/* Simple Ring Gauge representation */}
-        <div className="relative size-12 shrink-0 flex items-center justify-center">
-          <svg className="size-full -rotate-90" viewBox="0 0 36 36">
-            <path
-              className="text-muted/60"
-              strokeWidth="3.5"
-              stroke="currentColor"
-              fill="none"
-              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-            />
-            <path
-              className="text-emerald-500"
-              strokeDasharray="92, 100"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              stroke="currentColor"
-              fill="none"
-              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-            />
-          </svg>
-          <span className="absolute font-mono text-[11px] font-bold text-foreground">92%</span>
+        <div className="size-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+          <FolderGit2 className="size-5" />
         </div>
 
-        <div className="space-y-0.5">
-          <div className="text-xs font-semibold text-foreground">Overall Health Score</div>
+        <div className="space-y-0.5 min-w-0">
+          <div className="text-xs font-semibold text-foreground truncate">
+            {repoName || 'No Repository Selected'}
+          </div>
           <p className="text-[10px] text-muted-foreground leading-tight">
-            High quality score across build pipelines, test coverage, and security audits.
+            {repoName
+              ? `Real-time repository telemetry for ${repoName}.`
+              : 'Select a repository to view branches, commits, and run specialized agent audits.'}
           </p>
         </div>
       </div>
@@ -57,11 +85,31 @@ export function RepositoryHealth() {
       {/* Health Metric Rows */}
       <div className="space-y-1.5 text-xs">
         {[
-          { label: 'Build Status', status: 'Passing', isOk: true },
-          { label: 'Tests', status: '94% coverage', isOk: true },
-          { label: 'Dependencies', status: '3 outdated', isOk: false },
-          { label: 'Security', status: 'No critical issues', isOk: true },
-          { label: 'Code Quality', status: 'Excellent', isOk: true },
+          {
+            label: 'GitHub Connection',
+            status: isConnected ? 'Authorized' : 'Disconnected',
+            isOk: isConnected,
+          },
+          {
+            label: 'Repository Scope',
+            status: repoName ? 'Enforced & Isolated' : 'Unselected',
+            isOk: Boolean(repoName),
+          },
+          {
+            label: 'Remote Branches',
+            status: branchesCount !== null ? `${branchesCount} branch(es)` : 'None detected',
+            isOk: Boolean(branchesCount && branchesCount > 0),
+          },
+          {
+            label: 'Automated Code Review',
+            status: 'Ready (Agent Available)',
+            isOk: true,
+          },
+          {
+            label: 'Security Analysis',
+            status: 'Ready (Agent Available)',
+            isOk: true,
+          },
         ].map((item) => (
           <div
             key={item.label}
@@ -71,10 +119,10 @@ export function RepositoryHealth() {
             <div className="flex items-center gap-1.5 font-mono text-[10px] font-medium">
               <span
                 className={`size-1.5 rounded-full ${
-                  item.isOk ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                  item.isOk ? 'bg-emerald-500' : 'bg-muted-foreground'
                 }`}
               />
-              <span className={item.isOk ? 'text-foreground' : 'text-amber-600 dark:text-amber-400'}>
+              <span className={item.isOk ? 'text-foreground' : 'text-muted-foreground'}>
                 {item.status}
               </span>
             </div>

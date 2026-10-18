@@ -43,8 +43,11 @@ export function WorkspaceMain({
         {currentTab === 'dashboard' ? (
           <Dashboard
             onQuickAction={(actionId) => {
-              if (actionId === 'ask-copilot' && externalSetActiveTab) {
+              if (!externalSetActiveTab) return
+              if (actionId === 'ask-copilot' || actionId === 'explain-code') {
                 externalSetActiveTab('chat')
+              } else if (actionId === 'pr-review' || actionId === 'gen-tests') {
+                externalSetActiveTab('agents')
               }
             }}
             onSelectRepo={(r) => {
