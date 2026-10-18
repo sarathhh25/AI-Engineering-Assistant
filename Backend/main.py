@@ -897,10 +897,19 @@ async def github_sync_token_endpoint(
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required to sync GitHub token.")
 
+    token_str = (req.token or "").strip()
+    if not token_str:
+        raise HTTPException(status_code=422, detail="Missing required 'token' parameter.")
+
     try:
-        return await sync_token_from_session(user, req.token, db)
+        return await sync_token_from_session(user, token_str, db)
+    except PermissionError as pe:
+        raise HTTPException(status_code=401, detail=str(pe))
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        safe_log(f"GitHub token sync error: {e}")
+        raise HTTPException(status_code=400, detail="Failed to synchronize GitHub token.")
 
 
 
@@ -1054,10 +1063,10 @@ async def chat_endpoint(
                 )
                 if not chat_session:
                     raise HTTPException(status_code=404, detail="Conversation not found or access denied.")
-                # Inherit conversation's bound repository if not specified by client
-                if not current_repo and chat_session.repo_name:
+                # Inherit conversation's bound repository if not specified by client or if generic default was passed
+                if (not current_repo or current_repo == "ai-engineering-assistant") and chat_session.repo_name:
                     current_repo = chat_session.repo_name
-                elif current_repo and chat_session.repo_name:
+                elif current_repo and current_repo != "ai-engineering-assistant" and chat_session.repo_name:
                     # Enforce strict repository-bound conversation association immediately
                     c_repo = chat_session.repo_name.strip().lower()
                     r_repo = current_repo.strip().lower()
@@ -1077,8 +1086,8 @@ async def chat_endpoint(
                 # Guest or unpersisted chat ID
                 pass
 
-        # Fallback to user's saved selected_repo if client repo is not specified
-        if not current_repo and current_user and current_user.settings and current_user.settings.selected_repo:
+        # Fallback to user's saved selected_repo if client repo is not specified or generic default
+        if (not current_repo or current_repo == "ai-engineering-assistant") and current_user and current_user.settings and current_user.settings.selected_repo:
             current_repo = current_user.settings.selected_repo
 
         user_gh_login = current_user.settings.github_username if (current_user and current_user.settings) else None

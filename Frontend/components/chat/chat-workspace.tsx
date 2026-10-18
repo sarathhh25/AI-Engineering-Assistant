@@ -15,17 +15,22 @@ interface ChatWorkspaceProps {
   onOpenRepos?: () => void
   onOpenSettings?: () => void
   onUpdateChatTitle?: (chatId: string, title: string) => void
+  onSelectChat?: (chatId: string) => void
 }
 
 export function ChatWorkspace({
   activeChatId,
   activeProject = 'AI Engineering Assistant',
-  activeRepo = 'ai-engineering-assistant',
+  activeRepo = '',
   onOpenProjects,
   onOpenRepos,
   onOpenSettings,
   onUpdateChatTitle,
+  onSelectChat,
 }: ChatWorkspaceProps) {
+  const currentRepo = (activeRepo && activeRepo !== 'ai-engineering-assistant')
+    ? activeRepo
+    : (typeof window !== 'undefined' ? (localStorage.getItem('copilot_active_repo') || '') : '')
   const [messages, setMessages] = useState<ChatMessageData[]>([])
   const [systemStatus, setSystemStatus] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -137,7 +142,7 @@ export function ChatWorkspace({
       try {
         const response = await apiClient.sendChatMessage(
           userQuery,
-          activeRepo || 'ai-engineering-assistant',
+          currentRepo || undefined,
           [],
           activeChatId || undefined
         )
@@ -211,7 +216,7 @@ export function ChatWorkspace({
     try {
       const response = await apiClient.sendChatMessage(
         text,
-        activeRepo || 'ai-engineering-assistant',
+        currentRepo || undefined,
         attachedFilesPayload,
         activeChatId || undefined
       )
@@ -226,6 +231,28 @@ export function ChatWorkspace({
       }
 
       setMessages((prev) => [...prev, aiReply])
+
+      // If backend assigned a real conversation ID for an initial temporary session, migrate and notify parent
+      if (response.conversation_id && String(response.conversation_id) !== String(activeChatId)) {
+        const newId = String(response.conversation_id)
+        try {
+          const updatedMsgs = [...messages, userMsg, aiReply]
+          localStorage.setItem(`copilot_chat_messages_${newId}`, JSON.stringify(updatedMsgs))
+
+          const rawChats = localStorage.getItem('copilot_chats')
+          if (rawChats) {
+            const parsedChats = JSON.parse(rawChats)
+            const updatedChats = parsedChats.map((c: any) =>
+              c.id === activeChatId ? { ...c, id: newId, repo_name: currentRepo || c.repo_name } : c
+            )
+            localStorage.setItem('copilot_chats', JSON.stringify(updatedChats))
+          }
+        } catch (err) {}
+
+        if (onSelectChat) {
+          onSelectChat(newId)
+        }
+      }
     } catch (e: any) {
       setSystemStatus(null)
       const errorReply: ChatMessageData = {
@@ -247,7 +274,7 @@ export function ChatWorkspace({
           <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-muted-foreground font-sans text-[11px]">Active Repository:</span>
           <span className="font-semibold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 text-[11px] truncate">
-            {activeRepo || 'No repository selected'}
+            {currentRepo || 'No repository selected'}
           </span>
         </div>
         {(onOpenRepos || onOpenProjects) && (
@@ -275,7 +302,7 @@ export function ChatWorkspace({
                 How can AI Engineering Copilot help with {activeProject || 'your project'}?
               </h2>
               <p className="text-xs text-muted-foreground max-w-md leading-relaxed">
-                Active repository: <code className="px-1.5 py-0.5 rounded bg-secondary font-mono text-primary font-semibold">{activeRepo}</code>. Ask about architecture, review pull requests, or debug code.
+                Active repository: <code className="px-1.5 py-0.5 rounded bg-secondary font-mono text-primary font-semibold">{currentRepo || 'None'}</code>. Ask about architecture, review pull requests, or debug code.
               </p>
             </div>
           ) : (

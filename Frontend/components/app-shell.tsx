@@ -290,16 +290,18 @@ export function AppShell() {
       ? (localStorage.getItem('token') || localStorage.getItem('user_token'))
       : null
 
+    const effectiveRepo = activeRepo || (typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || '' : '')
+
     if (token) {
       try {
-        const newConv = await apiClient.createConversation('Engineering Chat', activeRepo)
+        const newConv = await apiClient.createConversation('Engineering Chat', effectiveRepo || undefined)
         const newChatObj: ChatItem = {
           id: newConv.id,
           title: newConv.title || 'Engineering Chat',
           timestamp: 'Just now',
           group: 'Today',
           isPinned: false,
-          repo_name: activeRepo,
+          repo_name: effectiveRepo || undefined,
         }
         setChats((prev) => [newChatObj, ...prev])
         setActiveChatId(newConv.id)
@@ -314,7 +316,7 @@ export function AppShell() {
       timestamp: 'Just now',
       group: 'Today',
       isPinned: false,
-      repo_name: activeRepo,
+      repo_name: effectiveRepo || undefined,
     }
     setChats((prev) => {
       const updated = [newChatObj, ...prev]
@@ -503,6 +505,7 @@ export function AppShell() {
           }}
           onOpenSettings={() => setActiveTab('settings')}
           onUpdateChatTitle={handleUpdateChatTitle}
+          onSelectChat={setActiveChatId}
         />
       </div>
 

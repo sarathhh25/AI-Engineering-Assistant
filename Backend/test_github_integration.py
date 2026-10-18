@@ -498,6 +498,97 @@ class TestGitHubIntegration(unittest.TestCase):
         self.assertEqual(data.get("status"), "refused")
         self.assertNotIn("Here is an overview of the architecture", data.get("reply", ""))
 
+    # 16. Unauthenticated token synchronization
+    def test_16_sync_token_unauthenticated(self):
+        res = self.client.post(
+            "/api/integrations/github/sync-token",
+            json={"token": "gho_test_token_123"},
+        )
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("Authentication required", res.json()["detail"])
+
+    # 17. Missing or invalid sync-token request fields
+    def test_17_sync_token_missing_token(self):
+        # Empty body
+        res = self.client.post(
+            "/api/integrations/github/sync-token",
+            json={},
+            headers=self.auth_headers,
+        )
+        self.assertEqual(res.status_code, 422)
+
+        # Empty string token
+        res2 = self.client.post(
+            "/api/integrations/github/sync-token",
+            json={"token": "   "},
+            headers=self.auth_headers,
+        )
+        self.assertEqual(res2.status_code, 422)
+
+    # 18. Invalid or expired token rejected with HTTP 401
+    @patch("github_service.httpx.AsyncClient")
+    def test_18_sync_token_invalid_github_token(self, mock_client_cls):
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.json.return_value = {"message": "Bad credentials"}
+
+        async def mock_get(*args, **kwargs):
+            return mock_resp
+
+        mock_client.get = mock_get
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client_cls.return_value = mock_client
+
+        res = self.client.post(
+            "/api/integrations/github/sync-token",
+            json={"token": "ghp_invalid_or_expired_token"},
+            headers=self.auth_headers,
+        )
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("Provided token is not valid on GitHub", res.json()["detail"])
+
+    # 19. Valid token successfully synchronizes account
+    @patch("github_service.httpx.AsyncClient")
+    def test_19_sync_token_valid_github_token(self, mock_client_cls):
+        mock_client = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "id": 112233,
+            "login": "octocat_valid",
+            "avatar_url": "https://avatar.url/octocat",
+            "name": "Octo Cat",
+        }
+
+        async def mock_get(*args, **kwargs):
+            return mock_resp
+
+        mock_client.get = mock_get
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client_cls.return_value = mock_client
+
+        res = self.client.post(
+            "/api/integrations/github/sync-token",
+            json={"token": "ghp_valid_personal_access_token"},
+            headers=self.auth_headers,
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["username"], "octocat_valid")
+        # Ensure token is never exposed in response
+        self.assertNotIn("token", data)
+        self.assertNotIn("ghp_valid_personal_access_token", str(data))
+
+        # Verify DB persisted encrypted token
+        self.db.expire_all()
+        setting = self.db.query(UserSetting).filter(UserSetting.user_id == self.user.id).first()
+        self.assertEqual(setting.github_username, "octocat_valid")
+        self.assertIsNotNone(setting.github_token_encrypted)
+
 
 if __name__ == "__main__":
     unittest.main()

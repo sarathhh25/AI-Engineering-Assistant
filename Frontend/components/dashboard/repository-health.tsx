@@ -31,7 +31,7 @@ export function RepositoryHealth() {
               setBranchesCount(b.length)
             }
           } catch {
-            if (isMounted) setBranchesCount(1)
+            if (isMounted) setBranchesCount(null)
           }
         }
       } catch {

@@ -19,6 +19,7 @@ interface WorkspaceMainProps {
   onOpenRepos?: () => void
   onSelectRepo?: (repoName: string) => void
   onUpdateChatTitle?: (chatId: string, title: string) => void
+  onSelectChat?: (chatId: string) => void
 }
 
 export function WorkspaceMain({
@@ -32,6 +33,7 @@ export function WorkspaceMain({
   onOpenRepos,
   onSelectRepo,
   onUpdateChatTitle,
+  onSelectChat,
 }: WorkspaceMainProps) {
   const [internalActiveTab, setInternalActiveTab] = useState<string>('chat')
   const currentTab = externalActiveTab || internalActiveTab
@@ -78,6 +80,7 @@ export function WorkspaceMain({
             onOpenRepos={onOpenRepos}
             onOpenSettings={onOpenSettings}
             onUpdateChatTitle={onUpdateChatTitle}
+            onSelectChat={onSelectChat}
           />
         )}
       </div>

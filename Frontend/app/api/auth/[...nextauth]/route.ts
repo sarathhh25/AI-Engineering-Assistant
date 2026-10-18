@@ -96,9 +96,9 @@ export const authOptions: NextAuthOptions = {
           u.backendToken = token.backendToken
         }
       }
-      if (token?.accessToken) {
+      if (token?.githubAccessToken) {
         // @ts-ignore
-        session.accessToken = token.accessToken
+        session.githubAccessToken = token.githubAccessToken
       }
       return session
     },
@@ -141,8 +141,8 @@ export const authOptions: NextAuthOptions = {
           }
         }
       }
-      if (account?.access_token) {
-        token.accessToken = account.access_token
+      if (account?.provider === 'github' && account?.access_token) {
+        token.githubAccessToken = account.access_token
       }
       return token
     },

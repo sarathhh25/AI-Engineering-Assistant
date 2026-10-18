@@ -33,7 +33,7 @@ const INITIAL_TOOLS: IntegrationTool[] = [
 export function IntegrationsPage() {
   const { data: session } = useSession()
   const userProfile = useUserProfile()
-  const nextAuthAccessToken = (session as any)?.accessToken
+  const githubAccessToken = (session as any)?.githubAccessToken
   const backendSessionToken = (session as any)?.backendToken
 
   const [tools, setTools] = useState<IntegrationTool[]>(INITIAL_TOOLS)
@@ -103,13 +103,15 @@ export function IntegrationsPage() {
     // 2. Fetch real GitHub connection status from backend
     refreshGitHubStatus()
 
-    // 3. If NextAuth session has token, sync to backend if needed
-    if (nextAuthAccessToken) {
-      apiClient.syncGitHubToken(nextAuthAccessToken).then(() => {
-        refreshGitHubStatus()
-      }).catch(() => {})
+    // 3. Only sync GitHub token if NextAuth authenticated with GitHub and backend is not already connected
+    if (githubAccessToken && typeof githubAccessToken === 'string' && githubAccessToken.trim().length > 0) {
+      if (!githubStatus?.connected) {
+        apiClient.syncGitHubToken(githubAccessToken).then(() => {
+          refreshGitHubStatus()
+        }).catch(() => {})
+      }
     }
-  }, [nextAuthAccessToken, backendSessionToken])
+  }, [githubAccessToken, backendSessionToken, githubStatus?.connected])
 
   const handleConnectClick = async (tool: IntegrationTool) => {
     if (tool.id === 'github') {
