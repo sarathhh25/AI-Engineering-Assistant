@@ -137,9 +137,9 @@ _IN_SCOPE_REGEXES = [
     re.compile(r"\bwhat\s+are\s+the\s+(?:main\s+)?(?:folders?|files?|directories)\b", re.IGNORECASE),
     re.compile(r"\bwhat\s+(?:does|do)\s+each\s+(?:folder|file|directory)\s+do\b", re.IGNORECASE),
     re.compile(r"\b(?:application\s+)?entry\s+points?\b", re.IGNORECASE),
-    re.compile(r"\bwhere\s+(?:is|are)\s+(?:the\s+)?(?:application\s+)?entry\s+points?\b", re.IGNORECASE),
-    re.compile(r"\bwhat\s+(?:is|does)\s+this\s+(?:project|repo|repository|codebase|app)\s+(?:about|do)\b", re.IGNORECASE),
-    re.compile(r"\b(?:overview|summary|architecture)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+(?:is|does)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)(?:\s+(?:about|do))?\b", re.IGNORECASE),
+    re.compile(r"\b(?:overview|summary|architecture|purpose|structure)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", re.IGNORECASE),
+    re.compile(r"\b(?:tell\s+me\s+about|explain|describe)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", re.IGNORECASE),
     re.compile(r"\bhow\s+(?:does\s+)?(?:auth|authentication|login)\s+(?:work|implemented|flow)\b", re.IGNORECASE),
     re.compile(r"\bexplain\s+(?:how\s+)?(?:auth|authentication|login)\s+works?\b", re.IGNORECASE),
 ]
@@ -196,6 +196,7 @@ def classify_query_rule_based(
     Returns ScopeDecision if definitive, or None if LLM classifier is required.
     """
     clean_q = " ".join(query.strip().split())
+    clean_q = re.sub(r"\b(project|repo|repository|codebase|app)(about|do|overview|summary)\b", r"\1 \2", clean_q, flags=re.IGNORECASE)
     q_lower = clean_q.lower()
 
     # 1. Immediate rejection of prompt injections and bypass attempts

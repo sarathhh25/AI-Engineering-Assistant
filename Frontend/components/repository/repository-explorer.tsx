@@ -122,10 +122,10 @@ export function RepositoryExplorer({
       if (status.selected_repo && status.selected_repo.trim()) {
         setResolvedRepo(status.selected_repo.trim())
       } else {
-        setResolvedRepo('sinuarlowbaby/Curious-Bee-AI-Module')
+        setResolvedRepo('')
       }
     }).catch(() => {
-      setResolvedRepo('sinuarlowbaby/Curious-Bee-AI-Module')
+      setResolvedRepo('')
     })
   }, [activeRepo])
 
@@ -340,6 +340,20 @@ export function RepositoryExplorer({
     if (file.type === 'file') {
       setSelectedFile(file)
     }
+  }
+
+  if (!resolvedRepo) {
+    return (
+      <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 space-y-4 select-none antialiased h-full flex flex-col items-center justify-center">
+        <div className="p-8 rounded-2xl bg-card border border-border text-center max-w-md space-y-3">
+          <FolderGit2 className="size-10 text-muted-foreground mx-auto" />
+          <h2 className="text-lg font-bold text-foreground">No Repository Selected</h2>
+          <p className="text-xs text-muted-foreground">
+            Please connect your GitHub account or select a repository from the repository selector to explore files, branches, and commits.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -467,7 +467,9 @@ def retrieve_repository_evidence(
     error_message: Optional[str] = None
     is_empty: bool = False
 
-    clean_q = query.lower()
+    clean_q = " ".join(query.strip().split()).lower()
+    # Normalize common concatenated queries/typos such as 'projectabout', 'repoabout', 'codebaseabout'
+    clean_q = re.sub(r"\b(project|repo|repository|codebase|app)(about|do|overview|summary)\b", r"\1 \2", clean_q)
 
     # Broad project-level inquiry patterns (covers overview, languages, frameworks, folders, files, entry points, architecture)
     broad_phrases = [
@@ -475,7 +477,13 @@ def retrieve_repository_evidence(
         "what's this project about", "what's this repo about", "what's this codebase about", "what's this app about",
         "what does this project do", "what does this repo do", "what does this app do", "what does this codebase do",
         "tell me about this project", "tell me about this repo", "tell me about this codebase", "tell me about this app",
+        "tell me about the project", "tell me about the repo", "tell me about the codebase",
         "explain this project", "explain this repo", "explain this codebase", "explain this app",
+        "explain the project", "explain the repo", "explain the codebase",
+        "describe this project", "describe this repo", "describe this codebase", "describe the project",
+        "what is this project", "what is this repo", "what is this codebase", "what is this app", "what is this repository",
+        "what is the project", "what is the repo", "what is the codebase", "what is the app",
+        "what does it do", "what is it about", "what's it about", "what is it",
         "project overview", "repo overview", "codebase overview", "architecture of this", "architecture",
         "technologies used", "technologies are used", "tech stack", "technology stack", "summary of the project", "dependencies",
         "overview of the project", "overview of this project", "overview of the repo", "overview of this repo",
@@ -486,15 +494,19 @@ def retrieve_repository_evidence(
         "what are the main folders", "what are the main files", "explain folders",
         "entry point", "entry points", "application entry point", "main entry", "where does the app start",
         "how does authentication work", "how is authentication implemented", "authentication flow", "auth flow",
+        "purpose of this project", "purpose of this repo", "project purpose", "what are we building",
+        "what kind of app is this", "what kind of project is this", "walk me through this codebase",
     ]
     is_broad = any(bp in clean_q for bp in broad_phrases) or bool(
-        re.search(r"\bwhat\s+(?:is|does)\s+this\s+(?:project|repo|repository|codebase|app)\s+(?:about|do)\b", clean_q)
+        re.search(r"\bwhat\s+(?:is|does)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
     ) or bool(
-        re.search(r"\b(?:overview|summary|architecture|structure)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
+        re.search(r"\b(?:overview|summary|architecture|structure|purpose|goal|description)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
     ) or bool(
-        re.search(r"\btell\s+me\s+about\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
+        re.search(r"\btell\s+me\s+about\s+(?:this|the|it)\b", clean_q)
     ) or bool(
-        re.search(r"\b(?:languages?|frameworks?|folders?|files?|directories|entry\s+points?)\b", clean_q)
+        re.search(r"\b(?:explain|describe|summarize)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
+    ) or bool(
+        re.search(r"\b(?:languages?|frameworks?|folders?|files?|directories|entry\s+points?|tech\s+stack)\b", clean_q)
     )
 
     targeted_files: List[str] = []
@@ -712,7 +724,8 @@ def retrieve_repository_evidence(
             "where", "which", "what", "how", "does", "this", "that", "from", "with",
             "implemented", "module", "function", "feature", "component", "about", "have",
             "there", "project", "repo", "repository", "code", "codebase", "implementation",
-            "application", "file", "files", "using", "used", "make", "show", "tell"
+            "application", "file", "files", "using", "used", "make", "show", "tell",
+            "give", "explain", "describe", "detail", "overview", "summary", "purpose"
         }
         query_words = [w for w in re.findall(r"\b[a-zA-Z]{4,}\b", clean_q) if w not in stopwords]
         matching_words = [w for w in query_words if w in evidence_text.lower()]
@@ -720,6 +733,9 @@ def retrieve_repository_evidence(
         if has_targeted:
             has_sufficient_context = True
         elif len(matching_words) > 0:
+            has_sufficient_context = True
+        elif not query_words and bool(evidence_blocks):
+            # If the query only consisted of general repository inquiry words and evidence was gathered
             has_sufficient_context = True
         else:
             has_sufficient_context = False
