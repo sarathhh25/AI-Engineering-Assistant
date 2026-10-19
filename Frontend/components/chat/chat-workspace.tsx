@@ -140,26 +140,27 @@ export function ChatWorkspace({
     })
   }
 
-  const handleRetryMessage = async (errorMsgId: string) => {
-    const errIdx = messages.findIndex((m) => m.id === errorMsgId)
-    if (errIdx === -1) return
+  const handleRetryMessage = async (msgId: string) => {
+    const targetIdx = messages.findIndex((m) => m.id === msgId)
+    if (targetIdx === -1) return
 
     let userQuery = ''
-    for (let i = errIdx - 1; i >= 0; i--) {
+    for (let i = targetIdx - 1; i >= 0; i--) {
       if (messages[i].role === 'user') {
         userQuery = messages[i].content
         break
       }
     }
 
-    handleClearMessage(errorMsgId)
+    handleClearMessage(msgId)
 
     if (userQuery) {
-      setSystemStatus('Retrying analysis with updated model engine...')
+      setSystemStatus('Retrying analysis with repository context...')
       try {
         const targetRepo = effectiveRepo || (typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || '' : '')
+        const cleanQuery = userQuery.replace(/\n\n\[Attached Files: [^\]]+\]/, '').trim()
         const response = await apiClient.sendChatMessage(
-          userQuery,
+          cleanQuery || userQuery,
           targetRepo || undefined,
           [],
           activeChatId || undefined
@@ -173,8 +174,16 @@ export function ChatWorkspace({
           references: response.references && response.references.length > 0 ? response.references : undefined,
         }
         setMessages((prev) => [...prev, aiReply])
-      } catch (e) {
+      } catch (e: any) {
         setSystemStatus(null)
+        const errorReply: ChatMessageData = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          content: `⚠️ Connection Error: Unable to complete request with the backend server (${e.message || 'Request failed'}). Make sure the backend service is running on port 8000.`,
+          isError: true,
+        }
+        setMessages((prev) => [...prev, errorReply])
       }
     }
   }
@@ -336,10 +345,19 @@ export function ChatWorkspace({
           )}
 
           {systemStatus && (
-            <div className="flex justify-start w-full animate-in fade-in duration-150 select-none">
-              <div className="flex items-center gap-2.5 max-w-[95%] sm:max-w-[85%] py-2.5 px-4 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-mono shadow-xs">
-                <Loader2 className="size-4 animate-spin shrink-0 text-primary" />
-                <span className="truncate">{systemStatus}</span>
+            <div className="flex justify-start w-full animate-in fade-in duration-200 select-none">
+              <div className="flex items-center gap-3 max-w-[860px]">
+                <div className="size-7 sm:size-8 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 shrink-0">
+                  <Sparkles className="size-4 animate-pulse" />
+                </div>
+                <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-secondary/60 border border-border/50 text-muted-foreground text-xs font-mono">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="size-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+                    <span className="size-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
+                    <span className="size-1.5 rounded-full bg-primary animate-bounce" />
+                  </div>
+                  <span className="text-foreground/80 font-sans text-xs">{systemStatus}</span>
+                </div>
               </div>
             </div>
           )}

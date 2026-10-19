@@ -54,14 +54,14 @@ export function CodeBlock({ language = 'typescript', filename, code }: CodeBlock
 
       {/* Code Area with Line Numbers */}
       <div className="p-3 bg-muted/20 overflow-x-auto text-foreground leading-relaxed font-mono w-full">
-        <table className="w-full text-left border-collapse">
+        <table className="min-w-full text-left border-collapse table-auto">
           <tbody>
             {lines.map((line, idx) => (
               <tr key={idx} className="hover:bg-muted/40 transition-colors">
-                <td className="pr-4 select-none text-right text-muted-foreground/60 text-[10px] w-8">
+                <td className="pr-4 select-none text-right text-muted-foreground/50 text-[11px] w-9 font-mono">
                   {idx + 1}
                 </td>
-                <td className="whitespace-pre font-mono text-[11px] text-foreground">
+                <td className="whitespace-pre font-mono text-[12px] text-foreground/90 pr-3">
                   {line}
                 </td>
               </tr>
