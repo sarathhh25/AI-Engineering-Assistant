@@ -6,11 +6,18 @@ import { RepositoryRow, RepoRowData } from './repository-row'
 import { apiClient } from '@/lib/api-client'
 
 interface RecentRepositoriesProps {
+  refreshKey?: number
+  activeRepo?: string
   onSelectRepo?: (repo: RepoRowData) => void
   onViewAll?: () => void
 }
 
-export function RecentRepositories({ onSelectRepo, onViewAll }: RecentRepositoriesProps) {
+export function RecentRepositories({
+  refreshKey = 0,
+  activeRepo,
+  onSelectRepo,
+  onViewAll,
+}: RecentRepositoriesProps) {
   const [repos, setRepos] = useState<RepoRowData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -21,17 +28,29 @@ export function RecentRepositories({ onSelectRepo, onViewAll }: RecentRepositori
     try {
       const res = await apiClient.getGitHubRepositories(1, 10)
       if (res && res.repositories && res.repositories.length > 0) {
+        const currentActive =
+          activeRepo ||
+          (typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || '' : '')
+
         const mapped: RepoRowData[] = res.repositories.map((r) => {
-          const parts = (r.full_name || '').split('/')
+          const fullName = r.full_name || r.name
+          const parts = fullName.split('/')
           const owner = parts.length > 1 ? parts[0] : 'You'
+          const isSelected =
+            Boolean(currentActive) &&
+            (currentActive.toLowerCase() === fullName.toLowerCase() ||
+             currentActive.toLowerCase() === r.name.toLowerCase())
+
           return {
             id: String(r.id),
             name: r.name,
+            fullName,
             owner: owner,
             language: r.language || 'Code',
             branch: r.default_branch || 'main',
             updated: r.updated_at ? new Date(r.updated_at).toLocaleDateString() : (r.private ? 'Private' : 'Public'),
-            status: r.private ? 'Private' : 'Active',
+            status: r.private ? 'Private' : 'Public',
+            isActive: isSelected,
           }
         })
         setRepos(mapped)
@@ -44,11 +63,24 @@ export function RecentRepositories({ onSelectRepo, onViewAll }: RecentRepositori
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeRepo])
 
   useEffect(() => {
     loadRepositories()
-  }, [loadRepositories])
+  }, [loadRepositories, refreshKey])
+
+  const handleSelect = async (repo: RepoRowData) => {
+    const target = repo.fullName || repo.name
+    try {
+      await apiClient.selectGitHubRepository(target)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('copilot_active_repo', target)
+      }
+    } catch {}
+    if (onSelectRepo) {
+      onSelectRepo(repo)
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -64,7 +96,7 @@ export function RecentRepositories({ onSelectRepo, onViewAll }: RecentRepositori
             onClick={onViewAll}
             className="text-primary hover:underline transition-colors text-[11px] font-medium flex items-center gap-1 cursor-pointer"
           >
-            View all repositories <ArrowRight className="size-3" />
+            Switch / Select Repository <ArrowRight className="size-3" />
           </button>
         )}
       </div>
@@ -107,7 +139,7 @@ export function RecentRepositories({ onSelectRepo, onViewAll }: RecentRepositori
             </thead>
             <tbody className="divide-y divide-border/60 text-foreground">
               {repos.map((repo) => (
-                <RepositoryRow key={repo.id} repo={repo} onSelect={onSelectRepo} />
+                <RepositoryRow key={repo.id} repo={repo} onSelect={handleSelect} />
               ))}
             </tbody>
           </table>
