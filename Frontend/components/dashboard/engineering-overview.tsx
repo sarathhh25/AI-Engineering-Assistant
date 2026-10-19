@@ -57,7 +57,7 @@ export function EngineeringOverview() {
               reposCount = repoList.repositories.length
             }
           } catch {
-            reposCount = 1
+            reposCount = 0
           }
         }
 

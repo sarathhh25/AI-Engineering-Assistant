@@ -21,10 +21,10 @@ export function CodeBlock({ language = 'typescript', filename, code }: CodeBlock
   const lines = code.trim().split('\n')
 
   return (
-    <div className="my-3 rounded-xl border border-border bg-card overflow-hidden shadow-sm font-mono text-xs select-none">
+    <div className="my-3 rounded-xl border border-border bg-card overflow-hidden shadow-sm font-mono text-xs w-full min-w-0">
       {/* Header Bar */}
-      <div className="px-3.5 py-1.5 bg-muted/60 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="px-3.5 py-1.5 bg-muted/60 border-b border-border flex items-center justify-between select-none">
+        <div className="flex items-center gap-2 truncate">
           <FileCode className="size-3.5 text-primary shrink-0" />
           <span className="text-foreground font-medium text-[11px]">
             {filename || `example.${language === 'python' ? 'py' : 'ts'}`}
@@ -53,7 +53,7 @@ export function CodeBlock({ language = 'typescript', filename, code }: CodeBlock
       </div>
 
       {/* Code Area with Line Numbers */}
-      <div className="p-3 bg-muted/20 overflow-x-auto text-foreground leading-relaxed font-mono">
+      <div className="p-3 bg-muted/20 overflow-x-auto text-foreground leading-relaxed font-mono w-full">
         <table className="w-full text-left border-collapse">
           <tbody>
             {lines.map((line, idx) => (

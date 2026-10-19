@@ -497,16 +497,28 @@ def retrieve_repository_evidence(
         "purpose of this project", "purpose of this repo", "project purpose", "what are we building",
         "what kind of app is this", "what kind of project is this", "walk me through this codebase",
     ]
-    is_broad = any(bp in clean_q for bp in broad_phrases) or bool(
-        re.search(r"\bwhat\s+(?:is|does)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
-    ) or bool(
-        re.search(r"\b(?:overview|summary|architecture|structure|purpose|goal|description)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
-    ) or bool(
-        re.search(r"\btell\s+me\s+about\s+(?:this|the|it)\b", clean_q)
-    ) or bool(
-        re.search(r"\b(?:explain|describe|summarize)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q)
-    ) or bool(
-        re.search(r"\b(?:languages?|frameworks?|folders?|files?|directories|entry\s+points?|tech\s+stack)\b", clean_q)
+    repo_variants = set()
+    if repo_name:
+        r_low = repo_name.lower()
+        repo_variants.add(r_low)
+        repo_variants.add(r_low.replace("-", " ").replace("_", " "))
+        repo_variants.add(r_low.replace("-", "").replace("_", ""))
+        if "/" in r_low:
+            sub = r_low.split("/")[-1]
+            repo_variants.add(sub)
+            repo_variants.add(sub.replace("-", " ").replace("_", " "))
+
+    is_repo_name_mentioned = any(rv in clean_q for rv in repo_variants if len(rv) > 2)
+
+    is_broad = (
+        any(bp in clean_q for bp in broad_phrases)
+        or bool(re.search(r"\bwhat\s+(?:is|does|are)\s+(?:this|the|it)\b", clean_q))
+        or bool(re.search(r"\bwhat\s+(?:is|does|are)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app|service|tool)\b", clean_q))
+        or bool(re.search(r"\b(?:overview|summary|architecture|structure|purpose|goal|description|details?|capabilities?|features?)\s+of\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q))
+        or bool(re.search(r"\btell\s+me\s+about\s+(?:this|the|it)\b", clean_q))
+        or bool(re.search(r"\b(?:explain|describe|summarize|understand|walkthrough|guide)\s+(?:this|the)\s+(?:project|repo|repository|codebase|app)\b", clean_q))
+        or bool(re.search(r"\b(?:languages?|frameworks?|folders?|files?|directories|entry\s+points?|tech\s+stack|dependencies)\b", clean_q))
+        or (is_repo_name_mentioned and bool(re.search(r"\b(?:what|how|tell|explain|describe|summarize|overview|about|do|built)\b", clean_q)))
     )
 
     targeted_files: List[str] = []
@@ -725,7 +737,10 @@ def retrieve_repository_evidence(
             "implemented", "module", "function", "feature", "component", "about", "have",
             "there", "project", "repo", "repository", "code", "codebase", "implementation",
             "application", "file", "files", "using", "used", "make", "show", "tell",
-            "give", "explain", "describe", "detail", "overview", "summary", "purpose"
+            "give", "explain", "describe", "detail", "overview", "summary", "purpose",
+            "actually", "more", "built", "work", "mean", "help", "understand", "please",
+            "kind", "type", "info", "information", "anything", "everything", "overall",
+            "general", "high", "level", "system", "service", "start", "getting", "started"
         }
         query_words = [w for w in re.findall(r"\b[a-zA-Z]{4,}\b", clean_q) if w not in stopwords]
         matching_words = [w for w in query_words if w in evidence_text.lower()]
