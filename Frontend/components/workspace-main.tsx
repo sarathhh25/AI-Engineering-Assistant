@@ -44,21 +44,32 @@ export function WorkspaceMain({
       <div className="flex-1 overflow-y-auto h-full flex flex-col">
         {currentTab === 'dashboard' ? (
           <Dashboard
+            activeRepo={activeRepo}
             onQuickAction={(actionId) => {
               if (!externalSetActiveTab) return
               if (actionId === 'ask-copilot' || actionId === 'explain-code') {
                 externalSetActiveTab('chat')
-              } else if (actionId === 'pr-review' || actionId === 'gen-tests') {
+              } else if (actionId === 'analyze-repo' || actionId === 'pr-review' || actionId === 'gen-tests') {
                 externalSetActiveTab('agents')
               }
             }}
             onSelectRepo={(r) => {
               if (onSelectRepo) {
-                onSelectRepo(r.name)
+                onSelectRepo(r.name || r.full_name)
               } else if (externalSetActiveTab) {
                 externalSetActiveTab('chat')
               }
             }}
+            onSelectConversation={(chatId) => {
+              if (onSelectChat) {
+                onSelectChat(chatId)
+              }
+              if (externalSetActiveTab) {
+                externalSetActiveTab('chat')
+              }
+            }}
+            onOpenRepos={onOpenRepos}
+            onNavigateTab={externalSetActiveTab}
           />
         ) : currentTab === 'agents' ? (
           <AgentsPage activeRepo={activeRepo} />

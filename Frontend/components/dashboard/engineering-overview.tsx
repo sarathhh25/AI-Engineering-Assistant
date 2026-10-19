@@ -4,22 +4,29 @@ import React, { useEffect, useState } from 'react'
 import {
   FolderGit2,
   MessageSquare,
-  Bot,
-  GitBranch,
   CheckCircle2,
-  Layers
+  Layers,
+  Server,
+  AlertCircle
 } from 'lucide-react'
 import { MetricCard } from './metric-card'
 import { apiClient } from '@/lib/api-client'
 
-export function EngineeringOverview() {
+interface EngineeringOverviewProps {
+  refreshKey?: number
+  activeRepo?: string
+}
+
+export function EngineeringOverview({ refreshKey = 0, activeRepo: externalActiveRepo }: EngineeringOverviewProps) {
+  const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     reposCount: 0,
     activeRepo: 'None',
     convsCount: 0,
     isConnected: false,
     githubUser: 'Not connected',
-    availableAgents: 6,
+    backendOnline: false,
+    backendVersion: '1.0.0',
   })
 
   useEffect(() => {
@@ -27,28 +34,34 @@ export function EngineeringOverview() {
 
     const loadData = async () => {
       try {
-        const [ghStatus, convs] = await Promise.allSettled([
+        const [ghStatus, convs, health] = await Promise.allSettled([
           apiClient.getGitHubStatus(),
           apiClient.getConversations(),
+          apiClient.checkHealth(),
         ])
 
         if (!isMounted) return
 
         let reposCount = 0
-        let activeRepo = 'None'
         let isConnected = false
         let githubUser = 'Not connected'
+        let activeRepo = externalActiveRepo || 'None'
 
         if (ghStatus.status === 'fulfilled' && ghStatus.value) {
           isConnected = Boolean(ghStatus.value.connected)
           githubUser = ghStatus.value.username || (isConnected ? 'Connected' : 'Not connected')
-          activeRepo = ghStatus.value.selected_repo || 'None'
+          if (!externalActiveRepo) {
+            activeRepo = ghStatus.value.selected_repo || (typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || 'None' : 'None')
+          }
         }
 
         let convsCount = 0
         if (convs.status === 'fulfilled' && Array.isArray(convs.value)) {
           convsCount = convs.value.length
         }
+
+        const backendOnline = health.status === 'fulfilled' && health.value?.status !== 'offline'
+        const backendVersion = health.status === 'fulfilled' ? health.value?.version || '1.0.0' : '1.0.0'
 
         if (isConnected) {
           try {
@@ -63,13 +76,17 @@ export function EngineeringOverview() {
 
         setStats({
           reposCount,
-          activeRepo: activeRepo.includes('/') ? activeRepo.split('/')[1] : activeRepo,
+          activeRepo: activeRepo !== 'None' && activeRepo.includes('/') ? activeRepo.split('/')[1] : activeRepo,
           convsCount,
           isConnected,
           githubUser,
-          availableAgents: 6,
+          backendOnline,
+          backendVersion,
         })
-      } catch {}
+      } catch {
+      } finally {
+        if (isMounted) setLoading(false)
+      }
     }
 
     loadData()
@@ -77,61 +94,45 @@ export function EngineeringOverview() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [refreshKey, externalActiveRepo])
 
   const repoTrendType: 'up' | 'down' | 'neutral' = stats.reposCount > 0 ? 'up' : 'neutral'
   const activeRepoTrendType: 'up' | 'down' | 'neutral' = stats.activeRepo !== 'None' ? 'up' : 'neutral'
   const chatTrendType: 'up' | 'down' | 'neutral' = stats.convsCount > 0 ? 'up' : 'neutral'
-  const oauthTrendType: 'up' | 'down' | 'neutral' = stats.isConnected ? 'up' : 'down'
+  const backendTrendType: 'up' | 'down' | 'neutral' = stats.backendOnline ? 'up' : 'down'
 
   const metrics = [
     {
       id: 'm1',
       label: 'Repositories',
-      metric: String(stats.reposCount),
-      trend: stats.isConnected ? `${stats.reposCount} accessible` : 'Connect GitHub',
+      metric: loading ? '...' : String(stats.reposCount),
+      trend: stats.isConnected ? `${stats.reposCount} accessible` : 'Connect GitHub in Integrations',
       trendType: repoTrendType,
       icon: FolderGit2,
     },
     {
       id: 'm2',
       label: 'Active Repository',
-      metric: stats.activeRepo === 'None' ? '—' : stats.activeRepo,
-      trend: stats.activeRepo !== 'None' ? 'Selected' : 'None selected',
+      metric: loading ? '...' : (stats.activeRepo === 'None' ? '—' : stats.activeRepo),
+      trend: stats.activeRepo !== 'None' ? 'Selected context' : 'No repository selected',
       trendType: activeRepoTrendType,
       icon: Layers,
     },
     {
       id: 'm3',
-      label: 'Chat Sessions',
-      metric: String(stats.convsCount),
-      trend: stats.convsCount > 0 ? 'Persisted history' : 'No chats yet',
+      label: 'Saved Conversations',
+      metric: loading ? '...' : String(stats.convsCount),
+      trend: stats.convsCount > 0 ? `${stats.convsCount} persisted session(s)` : 'No conversations yet',
       trendType: chatTrendType,
       icon: MessageSquare,
     },
     {
       id: 'm4',
-      label: 'AI Agents',
-      metric: String(stats.availableAgents),
-      trend: '6 Specialized models',
-      trendType: 'up' as const,
-      icon: Bot,
-    },
-    {
-      id: 'm5',
-      label: 'GitHub OAuth',
-      metric: stats.isConnected ? 'Active' : 'Offline',
-      trend: stats.isConnected ? stats.githubUser : 'Disconnected',
-      trendType: oauthTrendType,
-      icon: GitBranch,
-    },
-    {
-      id: 'm6',
-      label: 'System Status',
-      metric: 'Online',
-      trend: 'FastAPI Backend Ready',
-      trendType: 'up' as const,
-      icon: CheckCircle2,
+      label: 'Backend API Service',
+      metric: loading ? '...' : (stats.backendOnline ? 'Healthy' : 'Offline'),
+      trend: stats.backendOnline ? `FastAPI v${stats.backendVersion}` : 'Port 8000 unreachable',
+      trendType: backendTrendType,
+      icon: stats.backendOnline ? CheckCircle2 : Server,
     },
   ]
 
@@ -141,10 +142,10 @@ export function EngineeringOverview() {
         <h2 className="font-semibold text-foreground uppercase tracking-wider text-[11px]">
           Engineering Overview
         </h2>
-        <span className="text-muted-foreground text-[10px] font-mono">Live Workspace Telemetry</span>
+        <span className="text-muted-foreground text-[10px] font-mono">Verified System Telemetry</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {metrics.map((item) => (
           <MetricCard key={item.id} {...item} />
         ))}
