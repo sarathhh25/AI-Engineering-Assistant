@@ -28,9 +28,26 @@ export function ChatWorkspace({
   onUpdateChatTitle,
   onSelectChat,
 }: ChatWorkspaceProps) {
-  const currentRepo = (activeRepo && activeRepo !== 'ai-engineering-assistant')
+  const [mounted, setMounted] = useState(false)
+  const [persistedRepo, setPersistedRepo] = useState('')
+
+  useEffect(() => {
+    setMounted(true)
+    try {
+      const saved = localStorage.getItem('copilot_active_repo')
+      if (saved && saved.trim()) {
+        setPersistedRepo(saved.trim())
+      }
+    } catch (e) {}
+  }, [])
+
+  // Hydration-safe active repository resolution:
+  // SSR and initial client hydration pass only evaluate activeRepo prop to guarantee 100% deterministic markup.
+  // After client mount, persisted repository from localStorage is seamlessly restored.
+  const effectiveRepo = (activeRepo && activeRepo !== 'ai-engineering-assistant')
     ? activeRepo
-    : (typeof window !== 'undefined' ? (localStorage.getItem('copilot_active_repo') || '') : '')
+    : (mounted ? persistedRepo : '')
+
   const [messages, setMessages] = useState<ChatMessageData[]>([])
   const [systemStatus, setSystemStatus] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -140,9 +157,10 @@ export function ChatWorkspace({
     if (userQuery) {
       setSystemStatus('Retrying analysis with updated model engine...')
       try {
+        const targetRepo = effectiveRepo || (typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || '' : '')
         const response = await apiClient.sendChatMessage(
           userQuery,
-          currentRepo || undefined,
+          targetRepo || undefined,
           [],
           activeChatId || undefined
         )
@@ -214,9 +232,10 @@ export function ChatWorkspace({
 
     // Query FastAPI backend with text, attached files, and active conversation ID
     try {
+      const targetRepo = effectiveRepo || (typeof window !== 'undefined' ? localStorage.getItem('copilot_active_repo') || '' : '')
       const response = await apiClient.sendChatMessage(
         text,
-        currentRepo || undefined,
+        targetRepo || undefined,
         attachedFilesPayload,
         activeChatId || undefined
       )
@@ -243,7 +262,7 @@ export function ChatWorkspace({
           if (rawChats) {
             const parsedChats = JSON.parse(rawChats)
             const updatedChats = parsedChats.map((c: any) =>
-              c.id === activeChatId ? { ...c, id: newId, repo_name: currentRepo || c.repo_name } : c
+              c.id === activeChatId ? { ...c, id: newId, repo_name: targetRepo || c.repo_name } : c
             )
             localStorage.setItem('copilot_chats', JSON.stringify(updatedChats))
           }
@@ -274,7 +293,7 @@ export function ChatWorkspace({
           <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-muted-foreground font-sans text-[11px]">Active Repository:</span>
           <span className="font-semibold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 text-[11px] truncate">
-            {currentRepo || 'No repository selected'}
+            {effectiveRepo || (mounted ? 'No repository selected' : 'Connecting repository...')}
           </span>
         </div>
         {(onOpenRepos || onOpenProjects) && (
@@ -290,9 +309,9 @@ export function ChatWorkspace({
       {/* 1. Message Stream Area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto divide-y divide-border/30 no-scrollbar pb-6"
+        className="flex-1 overflow-y-auto no-scrollbar py-6 px-3 sm:px-6 md:px-8"
       >
-        <div className="max-w-3xl mx-auto w-full">
+        <div className="max-w-4xl mx-auto w-full space-y-5 sm:space-y-6">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[55vh] text-center px-4 space-y-3 animate-in fade-in duration-200 select-none">
               <div className="size-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
@@ -302,7 +321,7 @@ export function ChatWorkspace({
                 How can AI Engineering Copilot help with {activeProject || 'your project'}?
               </h2>
               <p className="text-xs text-muted-foreground max-w-md leading-relaxed">
-                Active repository: <code className="px-1.5 py-0.5 rounded bg-secondary font-mono text-primary font-semibold">{currentRepo || 'None'}</code>. Ask about architecture, review pull requests, or debug code.
+                Active repository: <code className="px-1.5 py-0.5 rounded bg-secondary font-mono text-primary font-semibold">{effectiveRepo || (mounted ? 'None' : '...')}</code>. Ask about architecture, review pull requests, or debug code.
               </p>
             </div>
           ) : (
@@ -317,9 +336,11 @@ export function ChatWorkspace({
           )}
 
           {systemStatus && (
-            <div className="py-3 px-6 my-2 mx-4 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-mono flex items-center gap-2 animate-in fade-in duration-150 select-none">
-              <Loader2 className="size-4 animate-spin shrink-0" />
-              <span>{systemStatus}</span>
+            <div className="flex justify-start w-full animate-in fade-in duration-150 select-none">
+              <div className="flex items-center gap-2.5 max-w-[95%] sm:max-w-[85%] py-2.5 px-4 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-mono shadow-xs">
+                <Loader2 className="size-4 animate-spin shrink-0 text-primary" />
+                <span className="truncate">{systemStatus}</span>
+              </div>
             </div>
           )}
         </div>
@@ -330,7 +351,7 @@ export function ChatWorkspace({
         onSubmit={handleSendMessage}
         onSelectSuggestion={(prompt) => handleSendMessage(prompt)}
         activeProject={activeProject}
-        activeRepo={activeRepo}
+        activeRepo={effectiveRepo}
         onOpenProjects={onOpenProjects}
         onOpenRepos={onOpenRepos}
       />

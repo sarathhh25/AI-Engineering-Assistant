@@ -44,7 +44,7 @@ function formatInlineMarkdown(text: string) {
       parts.push(
         <code
           key={match.index}
-          className="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-primary border border-border"
+          className="px-1.5 py-0.5 rounded bg-muted font-mono text-[11px] text-primary border border-border break-all"
         >
           {token.slice(1, -1)}
         </code>
@@ -127,28 +127,28 @@ function renderFormattedContent(content: string) {
           // Headings
           if (trimmed.startsWith('# ')) {
             return (
-              <h1 key={pIdx} className="text-base font-bold text-foreground pt-2">
+              <h1 key={pIdx} className="text-base font-bold text-foreground pt-2 break-words">
                 {formatInlineMarkdown(trimmed.replace(/^#\s+/, ''))}
               </h1>
             )
           }
           if (trimmed.startsWith('## ')) {
             return (
-              <h2 key={pIdx} className="text-sm font-bold text-foreground pt-1.5">
+              <h2 key={pIdx} className="text-sm font-bold text-foreground pt-1.5 break-words">
                 {formatInlineMarkdown(trimmed.replace(/^##\s+/, ''))}
               </h2>
             )
           }
           if (trimmed.startsWith('### ')) {
             return (
-              <h3 key={pIdx} className="text-xs font-bold text-foreground pt-1">
+              <h3 key={pIdx} className="text-xs font-bold text-foreground pt-1 break-words">
                 {formatInlineMarkdown(trimmed.replace(/^###\s+/, ''))}
               </h3>
             )
           }
           if (trimmed.startsWith('#### ')) {
             return (
-              <h4 key={pIdx} className="text-xs font-semibold text-foreground pt-0.5">
+              <h4 key={pIdx} className="text-xs font-semibold text-foreground pt-0.5 break-words">
                 {formatInlineMarkdown(trimmed.replace(/^####\s+/, ''))}
               </h4>
             )
@@ -161,14 +161,18 @@ function renderFormattedContent(content: string) {
               <ul key={pIdx} className="list-disc pl-4 space-y-1 text-foreground">
                 {listItems.map((item, iIdx) => {
                   const cleanItem = item.replace(/^[-*]\s+|\d+\.\s+/, '')
-                  return <li key={iIdx}>{formatInlineMarkdown(cleanItem)}</li>
+                  return (
+                    <li key={iIdx} className="break-words [overflow-wrap:anywhere]">
+                      {formatInlineMarkdown(cleanItem)}
+                    </li>
+                  )
                 })}
               </ul>
             )
           }
 
           return (
-            <p key={pIdx} className="leading-relaxed">
+            <p key={pIdx} className="leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {formatInlineMarkdown(trimmed)}
             </p>
           )
@@ -178,158 +182,196 @@ function renderFormattedContent(content: string) {
   })
 }
 
+function renderUserContent(content: string) {
+  if (content.includes('```')) {
+    return renderFormattedContent(content)
+  }
+  return (
+    <div className="whitespace-pre-wrap leading-relaxed break-words [overflow-wrap:anywhere]">
+      {formatInlineMarkdown(content)}
+    </div>
+  )
+}
+
 export function ChatMessage({ message, onClearMessage, onRetryMessage }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const user = useUserProfile()
   const isError = !isUser && (message.isError || message.content.includes('Backend Error:') || message.content.includes('charmap'))
 
-  return (
-    <div
-      className={`py-5 px-4 sm:px-8 flex gap-4 transition-colors ${
-        isUser
-          ? 'bg-transparent'
-          : isError
-          ? 'bg-destructive/5 border-y border-destructive/20'
-          : 'bg-muted/30 border-y border-border/40'
-      }`}
-    >
-      {/* Avatar */}
-      <div className="shrink-0">
-        {isUser ? (
-          user.image ? (
-            <img
-              src={user.image}
-              alt={user.name}
-              className="size-8 rounded-full object-cover shadow-sm ring-1 ring-border"
-            />
-          ) : (
-            <div className="size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-              {user.initials}
+  // 1. User Message: Aligned to the RIGHT
+  if (isUser) {
+    return (
+      <div className="w-full flex justify-end">
+        <div className="flex items-start gap-2.5 sm:gap-3 max-w-[88%] sm:max-w-[75%] justify-end min-w-0">
+          {/* User message body & subtle metadata header */}
+          <div className="flex flex-col items-end min-w-0">
+            {/* User name & timestamp */}
+            <div className="flex items-center gap-2 mb-1 px-1 select-none text-[11px] text-muted-foreground">
+              {message.timestamp && (
+                <span className="font-mono text-[10px] text-muted-foreground/60">{message.timestamp}</span>
+              )}
+              <span className="font-medium text-muted-foreground/80">
+                {user.name || 'You'}
+              </span>
             </div>
-          )
-        ) : isError ? (
-          <div className="size-8 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-white shadow-md shadow-red-500/20">
-            <AlertTriangle className="size-4" />
-          </div>
-        ) : (
-          <div className="size-8 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-            <Sparkles className="size-4" />
-          </div>
-        )}
-      </div>
 
-      {/* Content Body */}
-      <div className="flex-1 min-w-0 space-y-3 text-xs leading-relaxed text-foreground">
-        {/* Header Row */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-foreground text-xs">
-              {isUser ? user.name : 'AI Engineering Copilot'}
-            </span>
-            {!isUser && !isError && (
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20">
-                Verified Analysis
-              </span>
-            )}
-            {!isUser && isError && (
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-destructive/10 text-destructive border border-destructive/20 font-semibold">
-                Notice
-              </span>
+            {/* User bubble with subtle blue-tinted accent matching theme */}
+            <div className="rounded-2xl rounded-tr-xs bg-primary/10 dark:bg-primary/15 border border-primary/20 dark:border-primary/25 text-foreground px-4 py-2.5 sm:py-3 text-[13px] leading-relaxed shadow-xs break-words [overflow-wrap:anywhere] min-w-0">
+              {renderUserContent(message.content)}
+            </div>
+          </div>
+
+          {/* User Avatar */}
+          <div className="shrink-0 mt-0.5">
+            {user.image ? (
+              <img
+                src={user.image}
+                alt={user.name || 'User'}
+                className="size-7 sm:size-8 rounded-full object-cover shadow-xs ring-1 ring-primary/30"
+              />
+            ) : (
+              <div className="size-7 sm:size-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-xs ring-1 ring-primary/20">
+                {user.initials || 'U'}
+              </div>
             )}
           </div>
-          {message.timestamp && (
-            <span className="text-[10px] text-muted-foreground font-mono">{message.timestamp}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // 2. AI Assistant Message: Aligned to the LEFT
+  return (
+    <div className="w-full flex justify-start">
+      <div className="flex items-start gap-2.5 sm:gap-3.5 max-w-[95%] sm:max-w-[85%] min-w-0">
+        {/* Assistant Avatar */}
+        <div className="shrink-0 mt-0.5">
+          {isError ? (
+            <div className="size-7 sm:size-8 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center text-white shadow-md shadow-red-500/20">
+              <AlertTriangle className="size-4" />
+            </div>
+          ) : (
+            <div className="size-7 sm:size-8 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+              <Sparkles className="size-4" />
+            </div>
           )}
         </div>
 
-        {/* Error Card or Formatted Text */}
-        {isError ? (
-          <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive-foreground space-y-3">
-            <div className="text-xs text-red-300 font-medium leading-relaxed">
-              {message.content.replace(/^[⚠️\s]*/, '')}
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              {onRetryMessage && (
-                <button
-                  type="button"
-                  onClick={() => onRetryMessage(message.id)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-semibold transition-all shadow-xs cursor-pointer"
-                >
-                  <RefreshCw className="size-3" />
-                  Retry Question
-                </button>
-              )}
-              {onClearMessage && (
-                <button
-                  type="button"
-                  onClick={() => onClearMessage(message.id)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-[11px] font-medium border border-border transition-all cursor-pointer"
-                >
-                  <X className="size-3" />
-                  Clear That Error
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2.5 text-foreground text-[13px] leading-relaxed">
-            {renderFormattedContent(message.content)}
-          </div>
-        )}
-
-        {/* File Reference Pills */}
-        {message.references && message.references.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-[10px] text-muted-foreground font-mono">Referenced Files:</span>
-            {message.references.map((ref) => (
-              <span
-                key={ref}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary border border-border text-[10px] font-mono text-primary cursor-pointer hover:border-primary/40 transition-all shadow-2xs"
-              >
-                <FileCode className="size-3" />
-                {ref}
+        {/* Content Column */}
+        <div className="flex-1 min-w-0 space-y-2">
+          {/* Header Row: Identity, Verified Analysis Indicator, Timestamp */}
+          <div className="flex items-center gap-2 select-none px-1">
+            <span className="font-semibold text-foreground text-xs">
+              AI Engineering Copilot
+            </span>
+            {!isError && (
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-medium">
+                Verified Analysis
               </span>
-            ))}
+            )}
+            {isError && (
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/20 font-semibold">
+                Notice
+              </span>
+            )}
+            {message.timestamp && (
+              <span className="text-[10px] text-muted-foreground/60 font-mono ml-auto sm:ml-2">
+                {message.timestamp}
+              </span>
+            )}
           </div>
-        )}
 
-        {/* Structured Table (if present) */}
-        {message.tableData && (
-          <div className="my-3 rounded-xl border border-border overflow-x-auto bg-card font-mono text-[11px] shadow-xs">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-muted/80 border-b border-border text-muted-foreground">
-                <tr>
-                  {message.tableData.headers.map((h, i) => (
-                    <th key={i} className="py-2 px-3 font-semibold">{h}</th>
+          {/* Assistant Response Content Container */}
+          {isError ? (
+            <div className="p-3.5 sm:p-4 rounded-2xl rounded-tl-xs bg-destructive/10 border border-destructive/20 text-destructive-foreground space-y-3 shadow-xs">
+              <div className="text-xs text-red-300 font-medium leading-relaxed break-words">
+                {message.content.replace(/^[⚠️\s]*/, '')}
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                {onRetryMessage && (
+                  <button
+                    type="button"
+                    onClick={() => onRetryMessage(message.id)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-[11px] font-semibold transition-all shadow-xs cursor-pointer"
+                  >
+                    <RefreshCw className="size-3" />
+                    Retry Question
+                  </button>
+                )}
+                {onClearMessage && (
+                  <button
+                    type="button"
+                    onClick={() => onClearMessage(message.id)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-[11px] font-medium border border-border transition-all cursor-pointer"
+                  >
+                    <X className="size-3" />
+                    Clear That Error
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl rounded-tl-xs bg-card/60 border border-border/40 p-4 sm:p-5 text-foreground space-y-3 shadow-xs min-w-0">
+              <div className="space-y-2.5 text-foreground text-[13px] leading-relaxed break-words [overflow-wrap:anywhere]">
+                {renderFormattedContent(message.content)}
+              </div>
+
+              {/* File Reference Pills */}
+              {message.references && message.references.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/30">
+                  <span className="text-[10px] text-muted-foreground font-mono">Referenced Files:</span>
+                  {message.references.map((ref) => (
+                    <span
+                      key={ref}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary border border-border text-[10px] font-mono text-primary cursor-pointer hover:border-primary/40 transition-all shadow-2xs"
+                    >
+                      <FileCode className="size-3" />
+                      {ref}
+                    </span>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50 text-foreground">
-                {message.tableData.rows.map((row, rIdx) => (
-                  <tr key={rIdx} className="hover:bg-muted/40 transition-colors">
-                    {row.map((cell, cIdx) => (
-                      <td key={cIdx} className="py-2 px-3">{cell}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </div>
+              )}
 
-        {/* Code Snippets */}
-        {message.codeSnippets && message.codeSnippets.length > 0 && (
-          <div className="space-y-3 pt-1">
-            {message.codeSnippets.map((snippet, sIdx) => (
-              <CodeBlock
-                key={sIdx}
-                language={snippet.language}
-                filename={snippet.filename}
-                code={snippet.code}
-              />
-            ))}
-          </div>
-        )}
+              {/* Structured Table (if present) */}
+              {message.tableData && (
+                <div className="my-3 rounded-xl border border-border overflow-x-auto bg-card font-mono text-[11px] shadow-xs max-w-full">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-muted/80 border-b border-border text-muted-foreground">
+                      <tr>
+                        {message.tableData.headers.map((h, i) => (
+                          <th key={i} className="py-2 px-3 font-semibold">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50 text-foreground">
+                      {message.tableData.rows.map((row, rIdx) => (
+                        <tr key={rIdx} className="hover:bg-muted/40 transition-colors">
+                          {row.map((cell, cIdx) => (
+                            <td key={cIdx} className="py-2 px-3">{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Code Snippets */}
+              {message.codeSnippets && message.codeSnippets.length > 0 && (
+                <div className="space-y-3 pt-1">
+                  {message.codeSnippets.map((snippet, sIdx) => (
+                    <CodeBlock
+                      key={sIdx}
+                      language={snippet.language}
+                      filename={snippet.filename}
+                      code={snippet.code}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
