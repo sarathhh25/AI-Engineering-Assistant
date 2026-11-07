@@ -122,9 +122,9 @@ try:
 
     # ---- User Settings ----
     db.add_all([
-        UserSetting(user_id=user_sarath.id, preferred_model="gemini-3.6-flash", theme="dark"),
-        UserSetting(user_id=user_devbot.id, preferred_model="gemini-3.6-flash", theme="dark"),
-        UserSetting(user_id=user_admin.id, preferred_model="gemini-3.7-flash", theme="light"),
+        UserSetting(user_id=user_sarath.id, preferred_model="gemini-2.5-flash", theme="dark"),
+        UserSetting(user_id=user_devbot.id, preferred_model="gemini-2.5-flash", theme="dark"),
+        UserSetting(user_id=user_admin.id, preferred_model="gemini-2.5-flash", theme="light"),
     ])
 
     # ---- Repositories ----

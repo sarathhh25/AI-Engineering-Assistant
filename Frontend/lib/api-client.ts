@@ -273,6 +273,7 @@ class ApiClient {
 
         if (err.name === 'AbortError') {
           lastError = new Error(`Request timed out after ${timeoutMs}ms`)
+          break
         }
 
         if (attempt < retries) {
@@ -303,12 +304,16 @@ class ApiClient {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({ message, repo: repo || undefined, files, conversation_id: conversationId }),
-        timeoutMs: 40000,
-        retries: 1,
+        timeoutMs: 90000,
+        retries: 0,
       })
     } catch (e: any) {
+      const isTimeout = e.message && (e.message.includes('timed out') || e.message.includes('abort') || e.message.includes('AbortError'))
+      const detailMsg = isTimeout
+        ? `Request timed out (${e.message}). The repository analysis or AI generation took longer than expected. Please try again.`
+        : `Unable to complete request with the backend server (${e.message || 'Request failed'}). Make sure the backend service is running on port 8000.`
       return {
-        reply: `⚠️ Connection Error: Unable to complete request with the backend server (${e.message || 'Request failed'}). Make sure the backend service is running on port 8000.`,
+        reply: `⚠️ Connection Error: ${detailMsg}`,
         status: 'error',
         references: [],
       }

@@ -212,9 +212,9 @@ def check_rate_limit(key: str, max_requests: int = 60, window_seconds: int = 60)
     _rate_limits[key] = valid_ts
 
 retry_options = types.HttpRetryOptions(
-    attempts=3,
-    initial_delay=1.0,
-    max_delay=30.0,
+    attempts=2,
+    initial_delay=0.5,
+    max_delay=3.0,
     http_status_codes=[429, 500, 502, 503, 504]
 )
 
@@ -421,7 +421,7 @@ async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
     db.flush()
 
     # Create default settings
-    db.add(UserSetting(user_id=new_user.id, preferred_model="gemini-3.6-flash", theme="dark"))
+    db.add(UserSetting(user_id=new_user.id, preferred_model="gemini-2.5-flash", theme="dark"))
 
     # Issue 7-day session token
     token = secrets.token_urlsafe(32)
@@ -511,7 +511,7 @@ async def sso_sync_endpoint(
         )
         db.add(user)
         db.flush()
-        db.add(UserSetting(user_id=user.id, preferred_model="gemini-3.6-flash", theme="dark"))
+        db.add(UserSetting(user_id=user.id, preferred_model="gemini-2.5-flash", theme="dark"))
     else:
         if not user.is_active:
             raise HTTPException(status_code=401, detail="Account has been deactivated.")
@@ -574,7 +574,7 @@ async def get_me(authorization: Optional[str] = Header(None), db: Session = Depe
             "created_at": str(user.created_at),
         },
         "settings": {
-            "preferred_model": settings.preferred_model if settings else "gemini-3.6-flash",
+            "preferred_model": settings.preferred_model if settings else "gemini-2.5-flash",
             "theme": settings.theme if settings else "dark",
         },
         "repositories": [{"repo_name": r.repo_name, "language": r.language, "is_favorite": r.is_favorite} for r in repos],
@@ -952,22 +952,39 @@ def generate_smalltalk_response(user_question: str) -> str:
 # Cached working model discovered during runtime
 _working_gemini_model: Optional[str] = None
 
-# Prioritized list of active, high-performance Gemini models
+# Prioritized list of active, high-performance official Gemini models
 PREFERRED_GEMINI_MODELS = [
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-    "gemini-flash-latest",
-    "gemini-3.7-flash",
-    "gemini-3.5-flash",
-    "gemini-flash-lite-latest",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
     "gemini-2.5-pro",
+    "gemini-1.5-pro",
 ]
 
+MODEL_ALIASES = {
+    "gemini-3.8-flash": "gemini-2.5-flash",
+    "gemini-3.7-flash": "gemini-2.5-flash",
+    "gemini-3.6-flash": "gemini-2.5-flash",
+    "gemini-3.5-flash": "gemini-2.0-flash",
+    "gemini-flash-latest": "gemini-2.5-flash",
+    "gemini-flash-lite-latest": "gemini-2.0-flash",
+    "gemini-2-5-pro": "gemini-2.5-pro",
+    "gemini-2-5-flash": "gemini-2.5-flash",
+}
 
-def get_candidate_models(client) -> list:
+
+def get_candidate_models(client, requested_model: Optional[str] = None) -> list:
     global _working_gemini_model
     candidates = list(PREFERRED_GEMINI_MODELS)
-    if _working_gemini_model and _working_gemini_model in candidates:
+    target = requested_model
+    if target:
+        target = MODEL_ALIASES.get(target, target)
+        if target in candidates:
+            candidates.remove(target)
+            candidates.insert(0, target)
+        else:
+            candidates.insert(0, target)
+    elif _working_gemini_model and _working_gemini_model in candidates:
         candidates.remove(_working_gemini_model)
         candidates.insert(0, _working_gemini_model)
     return candidates
@@ -1013,7 +1030,7 @@ def generate_grounded_offline_summary(user_question: str, repo_name: str, eviden
 
 # 3. POST /api/chat
 @app.post("/api/chat")
-async def chat_endpoint(
+def chat_endpoint(
     request: ChatRequest,
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(None),
@@ -1294,7 +1311,8 @@ USER INQUIRY:
 
         if active_client:
             global _working_gemini_model
-            models_to_try = get_candidate_models(active_client)
+            user_pref = current_user.settings.preferred_model if (current_user and current_user.settings) else None
+            models_to_try = get_candidate_models(active_client, user_pref)
             for model_name in models_to_try:
                 try:
                     response = active_client.models.generate_content(

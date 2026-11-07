@@ -257,7 +257,7 @@ def classify_query_with_llm(
     repo_language: str,
     file_sample: List[str],
     client: Any,
-    model_name: str = "gemini-3.8-flash",
+    model_name: str = "gemini-2.5-flash",
 ) -> ScopeDecision:
     """
     Strict, structured LLM classification for boundary queries.
@@ -289,7 +289,7 @@ CRITICAL INSTRUCTIONS:
 {{"classification": "IN_SCOPE" | "OUT_OF_SCOPE" | "NEEDS_CLARIFICATION", "reason": "brief explanation"}}
 """
 
-    models_to_try = [model_name, "gemini-3.6-flash", "gemini-flash-latest", "gemini-3.7-flash"]
+    models_to_try = [model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-pro"]
     seen_models = set()
     candidate_list = [m for m in models_to_try if not (m in seen_models or seen_models.add(m))]
 
@@ -326,7 +326,7 @@ def evaluate_scope(
     known_repo_files: Optional[List[str]] = None,
     attached_files: Optional[List[Any]] = None,
     client: Optional[Any] = None,
-    model_name: str = "gemini-3.8-flash",
+    model_name: str = "gemini-2.5-flash",
 ) -> ScopeDecision:
     """
     Main entry point for repository scope evaluation.

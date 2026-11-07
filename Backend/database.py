@@ -149,7 +149,7 @@ class UserSetting(Base):
     github_scope = Column(String(255), nullable=True)
     github_connected_at = Column(DateTime, nullable=True)
     selected_repo = Column(String(255), nullable=True)
-    preferred_model = Column(String(100), default="gemini-3.6-flash")
+    preferred_model = Column(String(100), default="gemini-2.5-flash")
     theme = Column(String(20), default="dark")
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

@@ -623,60 +623,42 @@ def retrieve_repository_evidence(
                         references.append(f"@{alt_readme}")
                         readme_found = True
 
-            # 2. Fetch Multi-Ecosystem Manifests (up to 5 manifests across project)
-            manifests_retrieved = 0
+            # Pre-gather candidates for manifests, entry points, and targeted files to pre-fetch concurrently
+            cand_manifests: List[str] = []
             for cand in MANIFEST_CANDIDATES:
-                if manifests_retrieved >= 5:
+                if len(cand_manifests) >= 5:
                     break
                 cand_lower = cand.lower()
                 matched_mf = next((f for f in all_files if f.lower() == cand_lower or f.lower().endswith("/" + cand_lower)), None)
-                if matched_mf and f"@{matched_mf}" not in references:
-                    mf_text = get_remote_file_content_cached(repo_obj, matched_mf, commit_sha)
-                    if mf_text:
-                        mf_lines = mf_text.splitlines()[:60]
-                        evidence_blocks.append(f"=== Manifest: {matched_mf} ===\n" + "\n".join(mf_lines))
-                        references.append(f"@{matched_mf}")
-                        manifests_retrieved += 1
+                if matched_mf and matched_mf not in cand_manifests:
+                    cand_manifests.append(matched_mf)
 
-            # 3. Fetch Entry-Point Source Files (crucial when README is missing or broad/entry query)
+            cand_entry_points: List[str] = []
             if not readme_found or is_broad or any(k in clean_q for k in ["entry", "main", "start", "folder", "file"]):
-                entry_points_retrieved = 0
                 for ep in ENTRY_POINT_CANDIDATES:
-                    if entry_points_retrieved >= 3:
+                    if len(cand_entry_points) >= 3:
                         break
                     ep_lower = ep.lower()
                     matched_ep = next((f for f in all_files if f.lower() == ep_lower or f.lower().endswith("/" + ep_lower)), None)
-                    if matched_ep and f"@{matched_ep}" not in references and not any(r.startswith(f"@{matched_ep}:") for r in references):
-                        ep_text = get_remote_file_content_cached(repo_obj, matched_ep, commit_sha)
-                        if ep_text:
-                            lines = ep_text.splitlines()[:MAX_EVIDENCE_LINES]
-                            formatted = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines))
-                            line_tag = f"L1-{len(lines)}"
-                            evidence_blocks.append(f"=== Entry Point File: {matched_ep} ===\n{formatted}")
-                            references.append(f"@{matched_ep}:{line_tag}")
-                            entry_points_retrieved += 1
+                    if matched_ep and matched_ep not in cand_entry_points:
+                        cand_entry_points.append(matched_ep)
 
-            # 4. Filter non-code directories and discover query-targeted source code
             non_code_prefixes = ('.git/', '.agents/', '.claude/', '.idea/', '.vscode/', 'node_modules/', 'gradle/')
             code_files = [f for f in all_files if not any(f.startswith(p) for p in non_code_prefixes)]
-
             targeted_files: List[str] = []
 
-            # 4a. If asking about folders & files, pick 1 representative file from each distinct top-level code directory
             if any(k in clean_q for k in ["folder", "file", "directory", "structure", "each one do", "main folder"]):
                 top_level_dirs = sorted(list(set(f.split('/')[0] for f in code_files if '/' in f)))[:6]
                 for tld in top_level_dirs:
                     rep_file = next((f for f in code_files if f.startswith(tld + '/') and f.endswith(('.kt', '.java', '.ts', '.tsx', '.js', '.py', '.go', '.rs', '.json'))), None)
-                    if rep_file and f"@{rep_file}" not in references and not any(r.startswith(f"@{rep_file}:") for r in references):
+                    if rep_file and rep_file not in targeted_files:
                         targeted_files.append(rep_file)
 
-            # 4b. Match direct file mentions in query
             for f in code_files:
                 base_f = os.path.basename(f).lower()
                 if len(base_f) > 3 and base_f in clean_q:
                     targeted_files.append(f)
 
-            # 4c. Concept targeted discovery in actual code files
             if "auth" in clean_q or "login" in clean_q:
                 targeted_files.extend([f for f in code_files if any(w in f.lower() for w in ["login", "auth", "session", "key", "user"])][:3])
             if "api" in clean_q or "route" in clean_q or "endpoint" in clean_q or "controller" in clean_q:
@@ -688,7 +670,44 @@ def retrieve_repository_evidence(
             if "chat" in clean_q or "message" in clean_q:
                 targeted_files.extend([f for f in code_files if any(w in f.lower() for w in ["chat", "message"])][:3])
 
-            for tf in list(dict.fromkeys(targeted_files))[:4]:
+            cand_targeted = list(dict.fromkeys(targeted_files))[:4]
+
+            # Concurrently pre-fetch all candidates via ThreadPoolExecutor to prevent request timeouts
+            all_to_prefetch = list(dict.fromkeys(cand_manifests + cand_entry_points + cand_targeted))
+            uncached = [
+                f for f in all_to_prefetch
+                if f"{getattr(repo_obj, 'full_name', '')}:{f}:{commit_sha}" not in _FILE_CONTENT_CACHE
+            ]
+            if uncached:
+                from concurrent.futures import ThreadPoolExecutor
+                try:
+                    with ThreadPoolExecutor(max_workers=min(len(uncached), 6)) as executor:
+                        list(executor.map(lambda f: get_remote_file_content_cached(repo_obj, f, commit_sha), uncached))
+                except Exception as p_err:
+                    safe_log(f"[RepositoryService] Concurrent prefetch notice: {p_err}")
+
+            # 2. Fetch Multi-Ecosystem Manifests (up to 5 manifests across project)
+            for matched_mf in cand_manifests:
+                if f"@{matched_mf}" not in references:
+                    mf_text = get_remote_file_content_cached(repo_obj, matched_mf, commit_sha)
+                    if mf_text:
+                        mf_lines = mf_text.splitlines()[:60]
+                        evidence_blocks.append(f"=== Manifest: {matched_mf} ===\n" + "\n".join(mf_lines))
+                        references.append(f"@{matched_mf}")
+
+            # 3. Fetch Entry-Point Source Files (crucial when README is missing or broad/entry query)
+            for matched_ep in cand_entry_points:
+                if f"@{matched_ep}" not in references and not any(r.startswith(f"@{matched_ep}:") for r in references):
+                    ep_text = get_remote_file_content_cached(repo_obj, matched_ep, commit_sha)
+                    if ep_text:
+                        lines = ep_text.splitlines()[:MAX_EVIDENCE_LINES]
+                        formatted = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines))
+                        line_tag = f"L1-{len(lines)}"
+                        evidence_blocks.append(f"=== Entry Point File: {matched_ep} ===\n{formatted}")
+                        references.append(f"@{matched_ep}:{line_tag}")
+
+            # 4. Filter non-code directories and discover query-targeted source code
+            for tf in cand_targeted:
                 if f"@{tf}" in references or any(r.startswith(f"@{tf}:") for r in references):
                     continue
                 raw_content = get_remote_file_content_cached(repo_obj, tf, commit_sha)

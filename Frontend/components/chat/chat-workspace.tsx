@@ -176,11 +176,15 @@ export function ChatWorkspace({
         setMessages((prev) => [...prev, aiReply])
       } catch (e: any) {
         setSystemStatus(null)
+        const isTimeout = e.message && (e.message.includes('timed out') || e.message.includes('abort'))
+        const detailMsg = isTimeout
+          ? `Request timed out (${e.message}). The repository analysis or AI model took longer than expected. Please retry.`
+          : `Unable to complete request with the backend server (${e.message || 'Request failed'}). Make sure the backend service is running on port 8000.`
         const errorReply: ChatMessageData = {
           id: crypto.randomUUID(),
           role: 'assistant',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          content: `⚠️ Connection Error: Unable to complete request with the backend server (${e.message || 'Request failed'}). Make sure the backend service is running on port 8000.`,
+          content: `⚠️ Connection Error: ${detailMsg}`,
           isError: true,
         }
         setMessages((prev) => [...prev, errorReply])
